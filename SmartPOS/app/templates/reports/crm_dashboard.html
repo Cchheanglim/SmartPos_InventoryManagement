@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block title %}CRM Dashboard — SmartPOS{% endblock %}
+{% block content %}
+<h1>CRM Dashboard</h1>
+
+{% include "reports/_date_range_picker.html" %}
+
+<div class="card-grid">
+  <div class="stat-card">
+    <div class="stat-label"><i class="fa-solid fa-users"></i> Total Customers</div>
+    <div class="stat-value">{{ data.total_customers }}</div>
+    <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">All-time registered</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label"><i class="fa-solid fa-user-plus"></i> New Customers</div>
+    <div class="stat-value">{{ data.new_customers }}</div>
+    <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">In selected period</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label"><i class="fa-solid fa-dollar-sign"></i> Sales by Customer</div>
+    <div class="stat-value">${{ "%.2f"|format(data.customer_revenue) }}</div>
+    <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">{{ data.customer_orders }} orders, identified customers</div>
+  </div>
+  <div class="stat-card" style="border-left:4px solid #F39C12;">
+    <div class="stat-label"><i class="fa-solid fa-person-walking"></i> Walk-in Sales</div>
+    <div class="stat-value">${{ "%.2f"|format(data.walkin_revenue) }}</div>
+    <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">{{ data.walkin_orders }} orders, no customer attached</div>
+  </div>
+</div>
+
+<h2>Sales Trend</h2>
+<div class="card-grid" style="grid-template-columns: 2fr 1fr;">
+  <div class="card">
+    <h2 style="margin-top:0;">Daily Sales Trend</h2>
+    <canvas id="crmTrendChart" height="100"></canvas>
+  </div>
+  <div class="card">
+    <h2 style="margin-top:0;">Customer vs Walk-in Orders</h2>
+    <canvas id="splitChart" height="100"></canvas>
+  </div>
+</div>
+
+<h2>Sales by Customer</h2>
+<p class="subtitle" style="margin-top:-16px;">Ranked by revenue in the selected range — top 3 are your Top Customers.</p>
+<div class="card">
+  <table>
+    <tr><th>Rank</th><th>Customer</th><th>Orders</th><th>Total Spent</th></tr>
+    {% for c in data.sales_by_customer %}
+    <tr>
+      <td>#{{ loop.index }}</td>
+      <td>{{ c.name.split(' ')[0] }}{{ c.phone[:3] }}</td>
+      <td>{{ c.num_orders }}</td>
+      <td>${{ "%.2f"|format(c.total_spent) }}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="4" style="color:var(--text-muted);">No identified customer sales in this period.</td></tr>
+    {% endfor %}
+  </table>
+</div>
+
+<script>
+const labels = {{ data.revenue_trend | map(attribute='sale_date') | map('string') | list | tojson }};
+const values = {{ data.revenue_trend | map(attribute='total_revenue') | map('float') | list | tojson }};
+try {
+  new Chart(document.getElementById('crmTrendChart'), {
+  type: 'line',
+  data: { labels: labels, datasets: [{ label: 'Revenue', data: values, borderColor: '#7D39EB', tension: 0.3 }] }
+});
+} catch (e) { console.error('Chart failed:', e); }
+
+try {
+  new Chart(document.getElementById('splitChart'), {
+  type: 'pie',
+  data: {
+    labels: ['Identified Customers', 'Walk-in'],
+    datasets: [{ data: [{{ data.customer_orders }}, {{ data.walkin_orders }}], backgroundColor: ['#7D39EB', '#C6FF33'] }]
+  }
+});
+} catch (e) { console.error('Chart failed:', e); }
+</script>
+{% endblock %}

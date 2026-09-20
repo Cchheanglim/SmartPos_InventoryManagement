@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+{% block title %}Business Health — SmartPOS{% endblock %}
+{% block content %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-datalabels/2.2.0/chartjs-plugin-datalabels.min.js"></script>
+<h1>Business Health</h1>
+
+{% include "reports/_date_range_picker.html" %}
+
+<div class="card-grid">
+  <div class="stat-card">
+    <div class="stat-label"><i class="fa-solid fa-dollar-sign"></i> Gross Revenue</div>
+    <div class="stat-value">${{ "%.2f"|format(data.gross_revenue) }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label"><i class="fa-solid fa-arrow-trend-down"></i> Total Expenses</div>
+    <div class="stat-value">${{ "%.2f"|format(data.total_expenses) }}</div>
+    <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">Cost of goods sold</div>
+  </div>
+  <div class="stat-card" style="border-left:4px solid var(--success);">
+    <div class="stat-label"><i class="fa-solid fa-arrow-trend-up"></i> Net Profit</div>
+    <div class="stat-value" style="color:var(--success);">${{ "%.2f"|format(data.net_profit) }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label"><i class="fa-solid fa-truck-fast"></i> Spent Restocking</div>
+    <div class="stat-value">${{ "%.2f"|format(data.restocking_spend) }}</div>
+    <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">Cash paid to suppliers for received orders — separate from COGS above</div>
+  </div>
+  <div class="stat-card" style="position:relative;" id="inventory-value-card">
+    <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+      <div>
+        <div class="stat-label"><i class="fa-solid fa-warehouse"></i> Inventory Value</div>
+        <div class="stat-value">${{ "%.2f"|format(data.inventory_value) }}</div>
+        <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">Current stock, valued at cost</div>
+      </div>
+      <button type="button" onclick="toggleInventoryBreakdown()" class="btn btn-secondary btn-sm" style="padding:6px 10px;" title="By category">
+        <i class="fa-solid fa-chevron-down"></i>
+      </button>
+    </div>
+    <div id="inventory-breakdown" style="display:none; position:absolute; top:100%; right:0; margin-top:6px; background:var(--card-bg); border:1px solid var(--border-color); border-radius:var(--border-radius); box-shadow:var(--shadow-hover); padding:14px 18px; z-index:20; min-width:240px;">
+      <div style="font-size:11px; text-transform:uppercase; letter-spacing:0.5px; color:var(--text-muted); margin-bottom:8px;">By Category</div>
+      {% for c in data.inventory_by_category %}
+      <div style="display:flex; justify-content:space-between; gap:20px; padding:5px 0; font-size:13.5px;">
+        <span>{{ c.category }}</span>
+        <strong>${{ "%.2f"|format(c.total_value) }}</strong>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+<h2>Daily Revenue, Expense &amp; Profit Trend</h2>
+<div class="card"><canvas id="healthTrendChart" height="80"></canvas></div>
+
+<h2>Daily Report</h2>
+<div class="card"><canvas id="dailyReportChart" height="90"></canvas></div>
+
+<h2>Expense by Category</h2>
+<div class="card"><canvas id="expenseChart" height="140"></canvas></div>
+
+<script>
+document.addEventListener('click', function(e) {
+  const card = document.getElementById('inventory-value-card');
+  if (!card.contains(e.target)) document.getElementById('inventory-breakdown').style.display = 'none';
+});
+function toggleInventoryBreakdown() {
+  const el = document.getElementById('inventory-breakdown');
+  el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+
+const dailyLabels = {{ data.daily_trend | map(attribute='date') | map('string') | list | tojson }};
+const dailyRevenue = {{ data.daily_trend | map(attribute='revenue') | list | tojson }};
+const dailyExpense = {{ data.daily_trend | map(attribute='expense') | list | tojson }};
+const dailyProfit = {{ data.daily_trend | map(attribute='profit') | list | tojson }};
+
+try {
+  new Chart(document.getElementById('healthTrendChart'), {
+    type: 'line',
+    data: {
+      labels: dailyLabels,
+      datasets: [
+        { label: 'Revenue', data: dailyRevenue, borderColor: '#4C8BF5', tension: 0.3, fill: false },
+        { label: 'Expenses', data: dailyExpense, borderColor: '#E74C3C', tension: 0.3, fill: false },
+        { label: 'Profit', data: dailyProfit, borderColor: '#2ECC71', backgroundColor: 'rgba(46,204,113,0.12)', tension: 0.3, fill: true },
+      ]
+    },
+    options: { plugins: { datalabels: { display: false } } }
+  });
+} catch (e) { console.error('Chart failed:', e); }
+
+try {
+  new Chart(document.getElementById('dailyReportChart'), {
+    type: 'bar',
+    data: {
+      labels: dailyLabels,
+      datasets: [
+        { label: 'Revenue', data: dailyRevenue, backgroundColor: '#4C8BF5' },
+        { label: 'Expenses', data: dailyExpense, backgroundColor: '#E74C3C' },
+        { label: 'Profit', data: dailyProfit, backgroundColor: '#2ECC71' },
+      ]
+    },
+    plugins: [ChartDataLabels],
+    options: {
+      plugins: {
+        datalabels: {
+          anchor: 'end', align: 'top', font: { size: 9 },
+          formatter: v => v ? '$' + v.toFixed(2) : '',
+        }
+      },
+      scales: { y: { beginAtZero: true } }
+    }
+  });
+} catch (e) { console.error('Chart failed:', e); }
+
+const expLabels = {{ data.expense_by_category | map(attribute='category') | list | tojson }};
+const expValues = {{ data.expense_by_category | map(attribute='total_cost') | map('float') | list | tojson }};
+try {
+  new Chart(document.getElementById('expenseChart'), {
+    type: 'bar',
+    data: { labels: expLabels, datasets: [{ label: 'Expense', data: expValues, backgroundColor: '#E74C3C' }] },
+    options: { indexAxis: 'y', plugins: { legend: { display: false }, datalabels: { display: false } } }
+  });
+} catch (e) { console.error('Chart failed:', e); }
+</script>
+{% endblock %}

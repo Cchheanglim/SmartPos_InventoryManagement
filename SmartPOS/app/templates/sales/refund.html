@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Refund Sale #{{ sale.id }} — SmartPOS{% endblock %}
+{% block content %}
+<h1>Refund Sale #{{ sale.id }}</h1>
+<p class="subtitle">Pick how many of each item to refund. Stock is restored automatically.</p>
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% for category, message in messages %}
+    <div class="flash flash-{{ category }}">{{ message }}</div>
+  {% endfor %}
+{% endwith %}
+
+<div class="card" style="max-width:560px;">
+  <p class="subtitle" style="margin-top:-6px;">Sold {{ sale.created_at }} by {{ sale.cashier_name }} &middot; Total ${{ "%.2f"|format(sale.total_amount) }}</p>
+
+  <form method="POST">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <table>
+      <thead>
+        <tr><th>Item</th><th>Purchased</th><th>Already Refunded</th><th>Refund Qty</th></tr>
+      </thead>
+      <tbody>
+        {% for item in sale.items %}
+        <tr>
+          <td>{{ item.product_name }}<br><span style="font-size:12px; color:var(--text-muted);">${{ "%.2f"|format(item.unit_price) }} each</span></td>
+          <td>{{ item.quantity }}</td>
+          <td>{{ item.refunded_quantity }}</td>
+          <td>
+            {% if item.refundable_quantity > 0 %}
+            <input type="number" name="refund_qty_{{ item.id }}" min="0" max="{{ item.refundable_quantity }}" value="0" style="width:70px;">
+            {% else %}
+            <span style="color:var(--text-muted); font-size:12px;">Fully refunded</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <label style="margin-top:14px;">Reason</label>
+    <input type="text" name="reason" placeholder="e.g. Wrong item rung up, customer return">
+
+    <div style="margin-top:20px;">
+      <button type="submit" class="btn btn-danger"><i class="fa-solid fa-rotate-left"></i> Process Refund</button>
+      <a href="{{ url_for('sales.receipt', sale_id=sale.id) }}" class="btn btn-secondary">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

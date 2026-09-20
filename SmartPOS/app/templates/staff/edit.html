@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Edit {{ staff_member.name }} — SmartPOS{% endblock %}
+{% block content %}
+<h1>Edit Staff</h1>
+<p class="subtitle">Update {{ staff_member.name }}'s details, role, and assigned shift.</p>
+
+<div class="card" style="max-width:420px;">
+  <form method="POST">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label>Name</label>
+    <input type="text" name="name" value="{{ staff_member.name }}" required>
+
+    <label>Email <span style="font-weight:normal; color:var(--text-muted);">(used to log in — be careful)</span></label>
+    <input type="email" name="email" value="{{ staff_member.email }}" required>
+
+    <label>Phone Number (for password reset)</label>
+    <input type="tel" name="phone" value="{{ staff_member.phone or '' }}" placeholder="e.g. 012345678">
+
+    <label>Role</label>
+    <select name="role_name" required>
+      {% for r in roles %}
+      <option value="{{ r.name }}" style="text-transform:capitalize;" {{ 'selected' if r.name == staff_member.role_name }}>{{ r.name.replace('_', ' ') }}</option>
+      {% endfor %}
+    </select>
+
+    {% if staff_member.id == current_user.id %}
+    <p style="font-size:12px; color:var(--text-muted); margin-top:10px;">
+      <i class="fa-solid fa-circle-info"></i> You can't change your own role away from Admin, to avoid locking yourself out.
+    </p>
+    {% endif %}
+
+    <label>Shift Name
+      <a href="{{ url_for('shift.list_shifts') }}" style="font-weight:normal; font-size:12px;" target="_blank">(manage shift templates)</a>
+    </label>
+    <select name="shift_name" id="shift-picker">
+      <option value="">No shift assigned</option>
+      {% for t in shift_templates %}
+      <option value="{{ t.name }}" data-start="{{ format_shift_time(t.start_time) }}" data-end="{{ format_shift_time(t.end_time) }}"
+        {{ 'selected' if t.name == staff_member.shift_name }}>{{ t.name }} ({{ format_shift_time(t.start_time) }}–{{ format_shift_time(t.end_time) }})</option>
+      {% endfor %}
+    </select>
+
+    <div class="form-row">
+      <div>
+        <label>Shift Start</label>
+        <input type="time" name="shift_start" value="{{ format_shift_time(staff_member.shift_start) }}">
+      </div>
+      <div>
+        <label>Shift End</label>
+        <input type="time" name="shift_end" value="{{ format_shift_time(staff_member.shift_end) }}">
+      </div>
+    </div>
+
+    <div style="margin-top:20px;">
+      <button type="submit" class="btn btn-primary"><i class="fa-solid fa-check"></i> Save Changes</button>
+      <a href="{{ url_for('staff.list_staff') }}" class="btn btn-secondary">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

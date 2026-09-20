@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Barcode — {{ product.name }} — SmartPOS{% endblock %}
+{% block content %}
+<div class="no-print">
+  <h1>Product Barcode</h1>
+  <p class="subtitle">Scan this at checkout the same way as the sample sheet — it encodes the SKU below.</p>
+</div>
+
+{% if not product.sku %}
+<div class="card no-print" style="max-width:480px;">
+  <p>This product doesn't have a SKU set yet, so there's nothing to encode into a barcode.</p>
+  <a href="{{ url_for('products.edit_product', product_id=product.id) }}" class="btn btn-primary"><i class="fa-solid fa-pen"></i> Set a SKU</a>
+</div>
+{% else %}
+<div class="card" id="barcode-label" style="max-width:380px; text-align:center;">
+  <svg id="barcode-svg"></svg>
+  <div style="font-weight:600; margin-top:6px;">{{ product.name }}</div>
+  <div style="font-size:13px; color:var(--text-muted);">${{ "%.2f"|format(product.price) }}{% if product.category %} &middot; {{ product.category }}{% endif %}</div>
+</div>
+
+<div class="no-print" style="margin-top:16px;">
+  <button type="button" class="btn btn-primary" onclick="window.print()"><i class="fa-solid fa-print"></i> Print Label</button>
+  <a href="{{ url_for('products.list_products') }}" class="btn btn-secondary">Back to Products</a>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
+<script>
+  JsBarcode("#barcode-svg", "{{ product.sku|e }}", {
+    format: "CODE128",
+    displayValue: true,
+    fontSize: 16,
+    height: 60,
+    margin: 8,
+  });
+</script>
+<style>
+  @media print {
+    .no-print { display: none !important; }
+    #barcode-label { box-shadow: none; border: none; }
+  }
+</style>
+{% endif %}
+{% endblock %}

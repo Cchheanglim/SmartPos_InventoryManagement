@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}Attendance Log — SmartPOS{% endblock %}
+{% block content %}
+<div style="display:flex; justify-content:space-between; align-items:flex-start;">
+  <div>
+    <h1>Attendance Log</h1>
+    <p class="subtitle">Recent clock in/out activity across all staff.</p>
+  </div>
+  <a href="{{ url_for('staff.list_staff') }}" class="btn btn-secondary"><i class="fa-solid fa-xmark"></i> Exit</a>
+</div>
+
+<div class="card">
+  <table>
+    <tr><th>Staff</th><th>Clock In</th><th>Clock Out</th><th>Hours</th><th>Status</th><th>Cash Diff</th></tr>
+    {% for r in records %}
+    <tr>
+      <td>{{ r.user_name }}</td>
+      <td>{{ r.clock_in }}</td>
+      <td>{{ r.clock_out or '—' }}</td>
+      <td>{{ r.duration_hours }}h</td>
+      <td>
+        {% if r.is_open %}
+          <span class="badge badge-ok">In progress</span>
+          {% if 'manage_users' in permissions %}
+          <form method="POST" action="{{ url_for('attendance.force_close', attendance_id=r.id) }}" style="display:inline;" onsubmit="return confirm('Close this shift with no cash reconciliation? Use this only if the staff member forgot to clock out.');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn btn-secondary btn-sm" style="margin-left:6px;">Force Close</button>
+          </form>
+          {% endif %}
+        {% else %}
+          <span class="badge" style="background:var(--bg-color); color:var(--text-muted);">Completed</span>
+        {% endif %}
+      </td>
+      <td>
+        {% if r.cash_difference is not none %}
+          {% if r.cash_difference == 0 %}
+            <span style="color:var(--success);">Matched</span>
+          {% elif r.cash_difference > 0 %}
+            <span style="color:var(--success);">+${{ "%.2f"|format(r.cash_difference) }}</span>
+          {% else %}
+            <span style="color:var(--danger);">-${{ "%.2f"|format(-r.cash_difference) }}</span>
+          {% endif %}
+        {% else %}
+          <span style="color:var(--text-muted);">—</span>
+        {% endif %}
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="6" style="color:var(--text-muted);">No attendance records yet.</td></tr>
+    {% endfor %}
+  </table>
+</div>
+{% endblock %}

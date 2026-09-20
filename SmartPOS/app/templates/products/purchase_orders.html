@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}Purchase Orders — SmartPOS{% endblock %}
+{% block content %}
+<h1>Purchase Orders</h1>
+<p class="subtitle">Track stock ordered from suppliers, from order to delivery.</p>
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% for category, message in messages %}
+    <div class="flash flash-{{ category }}">{{ message }}</div>
+  {% endfor %}
+{% endwith %}
+
+<div class="card">
+  <div id="category-pills" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px;">
+    <a href="{{ url_for('products.list_purchase_orders') }}" class="category-pill {{ 'active' if not status }}">All</a>
+    <a href="{{ url_for('products.list_purchase_orders', status='ordered') }}" class="category-pill {{ 'active' if status == 'ordered' }}">Awaiting Delivery</a>
+    <a href="{{ url_for('products.list_purchase_orders', status='received') }}" class="category-pill {{ 'active' if status == 'received' }}">Received</a>
+    <a href="{{ url_for('products.list_purchase_orders', status='cancelled') }}" class="category-pill {{ 'active' if status == 'cancelled' }}">Cancelled</a>
+  </div>
+
+  {% if received_total %}
+  <p class="subtitle" style="margin-top:-6px;">Total spent on received orders shown below: <strong style="color:var(--text-dark);">${{ "%.2f"|format(received_total) }}</strong></p>
+  {% endif %}
+
+  <table>
+    <thead>
+      <tr>
+        <th>Product</th><th>Qty</th><th>Cost</th><th>Supplier</th><th>Ordered By</th><th>Ordered</th><th>Status</th><th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for po in orders %}
+      <tr>
+        <td>{{ po.product_name }}</td>
+        <td>{{ po.quantity_ordered }}</td>
+        <td>
+          {% if po.total_cost is not none %}
+            ${{ "%.2f"|format(po.total_cost) }}
+            <div style="font-size:11px; color:var(--text-muted);">${{ "%.2f"|format(po.unit_cost) }}/unit</div>
+          {% else %}
+            <span style="color:var(--text-muted);">—</span>
+          {% endif %}
+        </td>
+        <td>{{ po.supplier_name or '—' }}</td>
+        <td>{{ po.ordered_by_name }}</td>
+        <td>{{ po.ordered_at }}</td>
+        <td>
+          {% if po.status == 'ordered' %}<span style="color:var(--warning, #b8860b);">Awaiting Delivery</span>
+          {% elif po.status == 'received' %}<span style="color:var(--success);">Received</span>
+          {% else %}<span style="color:var(--text-muted);">Cancelled</span>{% endif %}
+        </td>
+        <td>
+          {% if po.is_pending %}
+          <form method="POST" action="{{ url_for('products.receive_purchase_order', po_id=po.id) }}" style="display:inline;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn btn-primary btn-sm"><i class="fa-solid fa-check"></i> Receive</button>
+          </form>
+          <form method="POST" action="{{ url_for('products.cancel_purchase_order', po_id=po.id) }}" style="display:inline;" onsubmit="return confirm('Cancel this purchase order?');">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn btn-danger btn-sm"><i class="fa-solid fa-xmark"></i></button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="8" style="color:var(--text-muted);">No purchase orders yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

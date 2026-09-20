@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}Manage Staff — SmartPOS{% endblock %}
+{% block content %}
+<div style="display:flex; justify-content:space-between; align-items:flex-start;">
+  <div>
+    <h1>Manage Staff</h1>
+    <p class="subtitle">View accounts and their roles. Roles determine permissions.</p>
+  </div>
+  <div>
+    <a href="{{ url_for('tasks.list_tasks') }}" class="btn btn-secondary" style="margin-right:8px;"><i class="fa-solid fa-list-check"></i> To-Do List</a>
+    <a href="{{ url_for('attendance.attendance_log') }}" class="btn btn-secondary" style="margin-right:8px;"><i class="fa-solid fa-clock"></i> Attendance Log</a>
+    <a href="{{ url_for('staff.permissions_matrix') }}" class="btn btn-secondary" style="margin-right:8px;"><i class="fa-solid fa-sliders"></i> Roles &amp; Permissions</a>
+    <a href="{{ url_for('staff.new_staff') }}" class="btn btn-primary"><i class="fa-solid fa-user-plus"></i> Add Employee</a>
+  </div>
+</div>
+
+<div class="card">
+  <table>
+    <tr><th>Staff ID</th><th>Name</th><th>Email</th><th>Role</th><th>Shift</th><th>Clocked In?</th><th>Status</th><th>Actions</th></tr>
+    {% for u in staff %}
+    <tr>
+      <td style="color:var(--text-muted); font-family:monospace;">STF-{{ '%03d'|format(u.id) }}</td>
+      <td style="display:flex; align-items:center; gap:10px;">
+        {% if u.profile_picture %}
+          <img src="{{ url_for('static', filename='uploads/avatars/' + u.profile_picture) }}" alt="" style="width:32px; height:32px; border-radius:50%; object-fit:cover;">
+        {% else %}
+          <div style="width:32px; height:32px; border-radius:50%; background:var(--bg-color); display:flex; align-items:center; justify-content:center;">
+            <i class="fa-solid fa-user" style="color:var(--text-muted); font-size:13px;"></i>
+          </div>
+        {% endif %}
+        {{ u.name }}
+      </td>
+      <td>{{ u.email }}</td>
+      <td style="text-transform:capitalize;">{{ u.role_name.replace('_', ' ') }}</td>
+      <td>
+        {% if u.shift_name %}
+          {{ u.shift_name }}{% if u.shift_start and u.shift_end %} ({{ format_shift_time(u.shift_start) }}–{{ format_shift_time(u.shift_end) }}){% endif %}
+        {% else %}
+          <span style="color:var(--text-muted);">—</span>
+        {% endif %}
+      </td>
+      <td>
+        {% if u.id in clocked_in_ids %}
+          <span class="badge badge-ok">In</span>
+        {% else %}
+          <span class="badge badge-low">Out</span>
+        {% endif %}
+      </td>
+      <td>
+        {% if u.is_active %}
+          <span class="badge badge-ok">Active</span>
+        {% else %}
+          <span class="badge badge-low">Inactive</span>
+        {% endif %}
+      </td>
+      <td>
+        {% if u.id != current_user.id %}
+        <div style="display:flex; gap:6px;">
+          <a href="{{ url_for('staff.view_staff', user_id=u.id) }}" class="btn-icon btn-icon-view" title="View details"><i class="fa-solid fa-eye"></i></a>
+          <a href="{{ url_for('staff.edit_staff', user_id=u.id) }}" class="btn-icon btn-icon-edit" title="Edit"><i class="fa-solid fa-user-pen"></i></a>
+          <a href="{{ url_for('staff.user_permissions', user_id=u.id) }}" class="btn-icon btn-icon-muted" title="Permissions"><i class="fa-solid fa-key"></i></a>
+          <form method="POST" action="{{ url_for('staff.toggle_active', user_id=u.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn-icon btn-icon-danger" title="{{ 'Deactivate' if u.is_active else 'Activate' }}">
+              <i class="fa-solid {{ 'fa-user-slash' if u.is_active else 'fa-user-check' }}"></i>
+            </button>
+          </form>
+        </div>
+        {% else %}
+        <a href="{{ url_for('staff.view_staff', user_id=u.id) }}" class="btn-icon btn-icon-view" title="View your details"><i class="fa-solid fa-eye"></i></a>
+        <span style="color:var(--text-muted); font-size:12px;">(you)</span>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+{% endblock %}

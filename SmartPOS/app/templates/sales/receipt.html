@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Receipt #{{ sale.id }} — SmartPOS{% endblock %}
+{% block content %}
+<h1>Sale Complete</h1>
+
+<div class="card receipt-box">
+  <p class="subtitle">Receipt #{{ sale.id }} &middot; {{ sale.created_at }}</p>
+  <table>
+    {% for item in sale.items %}
+    <tr>
+      <td>{{ item.product_name }} &times; {{ item.quantity }}</td>
+      <td style="text-align:right;">${{ "%.2f"|format(item.line_total) }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  <div class="cart-total">
+    <span>Discount</span><span>{{ sale.discount_percent }}%</span>
+  </div>
+  <div class="cart-total">
+    <span>Tax</span><span>{{ sale.tax_percent }}%</span>
+  </div>
+  <div class="cart-total">
+    <span>Total</span><span>${{ "%.2f"|format(sale.total_amount) }}</span>
+  </div>
+  <p style="font-size:13px; color:var(--text-muted);">Payment method: {{ sale.payment_method|replace('_', ' ')|upper }}</p>
+  {% if masked_customer %}
+  <p style="font-size:13px; color:var(--text-muted);">Customer: {{ masked_customer }}</p>
+  {% endif %}
+
+  {% if refunds %}
+  <hr style="border:none; border-top:1px dashed var(--border-color); margin:14px 0;">
+  <h2 style="margin-top:0; font-size:15px;"><i class="fa-solid fa-rotate-left"></i> Refund History</h2>
+  {% for r in refunds %}
+  <div style="font-size:13px; padding:8px 0; border-bottom:1px solid var(--border-color);">
+    <div style="display:flex; justify-content:space-between;">
+      <span>{{ r.created_at }} &middot; by {{ r.processed_by_name }}</span>
+      <span style="color:var(--danger); font-weight:600;">-${{ "%.2f"|format(r.refund_amount) }}</span>
+    </div>
+    {% if r.reason %}<div style="color:var(--text-muted); font-size:12px;">Reason: {{ r.reason }}</div>{% endif %}
+    <div style="color:var(--text-muted); font-size:12px;">
+      {% for item in r.items %}{{ item.product_name }} &times;{{ item.quantity }}{% if not loop.last %}, {% endif %}{% endfor %}
+    </div>
+  </div>
+  {% endfor %}
+  {% endif %}
+
+  {% if qr_data_uri %}
+  <div class="qr-wrap">
+    <img src="{{ qr_data_uri }}" alt="QR payment code">
+    <p style="font-size:12.5px; color:var(--text-muted);">Scan to pay ${{ "%.2f"|format(sale.total_amount) }}<br>
+    (Display only — no payment gateway is integrated)</p>
+  </div>
+  {% endif %}
+
+  <a href="{{ url_for('sales.checkout_page') }}" class="btn btn-primary" style="width:100%; text-align:center; margin-top:12px;"><i class="fa-solid fa-plus"></i> New Sale</a>
+  <a href="{{ url_for('sales.receipt_txt', sale_id=sale.id) }}" class="btn btn-secondary" style="width:100%; text-align:center; margin-top:8px;"><i class="fa-solid fa-download"></i> Download Receipt (.txt)</a>
+  {% if 'process_refund' in permissions %}
+  <a href="{{ url_for('sales.refund_sale', sale_id=sale.id) }}" class="btn btn-secondary" style="width:100%; text-align:center; margin-top:8px;"><i class="fa-solid fa-rotate-left"></i> Refund This Sale</a>
+  {% endif %}
+</div>
+{% endblock %}

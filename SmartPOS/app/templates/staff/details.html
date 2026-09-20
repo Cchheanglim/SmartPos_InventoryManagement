@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}{{ staff_member.name }} — SmartPOS{% endblock %}
+{% block content %}
+<div style="display:flex; justify-content:space-between; align-items:flex-start;">
+  <div>
+    <h1>Staff Details</h1>
+    <p class="subtitle">Viewing {{ staff_member.name }}'s account.</p>
+  </div>
+  <a href="{{ url_for('staff.list_staff') }}" class="btn btn-secondary"><i class="fa-solid fa-arrow-left"></i> Back to Staff</a>
+</div>
+
+<div style="display:flex; gap:20px; align-items:flex-start; flex-wrap:wrap;">
+  <div style="flex:1; min-width:260px;">
+    <div class="card" style="text-align:center;">
+      {% if staff_member.profile_picture %}
+        <img src="{{ url_for('static', filename='uploads/avatars/' + staff_member.profile_picture) }}"
+             alt="" style="width:110px; height:110px; border-radius:50%; object-fit:cover; margin-bottom:14px; border:1px solid var(--border-color);">
+      {% else %}
+        <div style="width:110px; height:110px; border-radius:50%; background:var(--bg-color); display:flex; align-items:center; justify-content:center; margin:0 auto 14px;">
+          <i class="fa-solid fa-user" style="font-size:38px; color:var(--text-muted);"></i>
+        </div>
+      {% endif %}
+      <h2 style="margin:0;">{{ staff_member.name }}</h2>
+      <p class="subtitle" style="text-transform:capitalize; margin-top:2px;">{{ staff_member.role_name.replace('_', ' ') }}</p>
+      <div style="margin-top:8px;">
+        {% if staff_member.is_active %}<span class="badge badge-ok">Active</span>{% else %}<span class="badge badge-low">Inactive</span>{% endif %}
+        {% if clocked_in %}<span class="badge badge-ok">Clocked In</span>{% endif %}
+      </div>
+
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:20px;">
+        <div class="stat-pill"><div class="stat-value">{{ tasks_completed }}/{{ tasks_total }}</div><div class="stat-label">Tasks Done</div></div>
+        <div class="stat-pill"><div class="stat-value">{{ attendance_count }}</div><div class="stat-label">Shifts Logged</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div style="flex:2; min-width:320px;">
+    <div class="card">
+      <h3 style="margin-top:0;">Personal Information</h3>
+      <dl class="info-grid">
+        <dt>Email</dt><dd>{{ staff_member.email }}</dd>
+        <dt>Phone</dt><dd>{{ staff_member.phone or '—' }}</dd>
+        <dt>Role</dt><dd style="text-transform:capitalize;">{{ staff_member.role_name.replace('_', ' ') }}</dd>
+        <dt>Shift</dt>
+        <dd>
+          {% if staff_member.shift_name %}
+            {{ staff_member.shift_name }}{% if staff_member.shift_start and staff_member.shift_end %} ({{ format_shift_time(staff_member.shift_start) }}–{{ format_shift_time(staff_member.shift_end) }}){% endif %}
+          {% else %}—{% endif %}
+        </dd>
+        <dt>Member Since</dt><dd>{{ staff_member.created_at }}</dd>
+        <dt>Status</dt><dd>{{ 'Active' if staff_member.is_active else 'Inactive' }}</dd>
+      </dl>
+
+      {% if staff_member.id != current_user.id %}
+      <div style="margin-top:24px; display:flex; gap:8px; flex-wrap:wrap;">
+        <a href="{{ url_for('staff.edit_staff', user_id=staff_member.id) }}" class="btn btn-primary"><i class="fa-solid fa-user-pen"></i> Edit Details</a>
+        <a href="{{ url_for('staff.user_permissions', user_id=staff_member.id) }}" class="btn btn-secondary"><i class="fa-solid fa-key"></i> Permissions</a>
+        <form method="POST" action="{{ url_for('staff.toggle_active', user_id=staff_member.id) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="btn btn-secondary">{{ 'Deactivate' if staff_member.is_active else 'Activate' }}</button>
+        </form>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

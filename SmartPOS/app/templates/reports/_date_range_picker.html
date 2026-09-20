@@ -1,0 +1,74 @@
+<form method="GET" id="date-range-form" style="display:flex; gap:10px; align-items:center; margin-bottom:20px; flex-wrap:wrap;">
+  <select id="date-preset" onchange="handleDatePresetChange()" style="width:auto;">
+    <option value="today">Today</option>
+    <option value="this_week">This Week</option>
+    <option value="this_month">This Month</option>
+    <option value="this_year">This Year</option>
+    <option value="last_30_days">Last 30 Days</option>
+    <option value="all_time">All Time</option>
+    <option value="custom">Custom</option>
+  </select>
+  <span id="custom-range-inputs" style="display:none; align-items:center; gap:10px;">
+    <input type="date" name="start" id="date-start" value="{{ data.start }}" style="width:auto;">
+    <span style="color:var(--text-muted);">to</span>
+    <input type="date" name="end" id="date-end" value="{{ data.end }}" style="width:auto;">
+  </span>
+  <button type="submit" class="btn btn-primary btn-sm"><i class="fa-solid fa-check"></i> Apply</button>
+</form>
+
+<script>
+function isoDate(d) { return d.toISOString().slice(0, 10); }
+
+function handleDatePresetChange() {
+  const preset = document.getElementById('date-preset').value;
+  const customInputs = document.getElementById('custom-range-inputs');
+  const startInput = document.getElementById('date-start');
+  const endInput = document.getElementById('date-end');
+  const today = new Date();
+  let start, end;
+
+  if (preset === 'custom') {
+    customInputs.style.display = 'flex';
+    return;
+  }
+  customInputs.style.display = 'none';
+
+  switch (preset) {
+    case 'today':
+      start = end = today;
+      break;
+    case 'this_week': {
+      const day = today.getDay();
+      const diffToMonday = (day === 0 ? 6 : day - 1);
+      start = new Date(today);
+      start.setDate(today.getDate() - diffToMonday);
+      end = today;
+      break;
+    }
+    case 'this_month':
+      start = new Date(today.getFullYear(), today.getMonth(), 1);
+      end = today;
+      break;
+    case 'this_year':
+      start = new Date(today.getFullYear(), 0, 1);
+      end = today;
+      break;
+    case 'last_30_days':
+      start = new Date(today);
+      start.setDate(today.getDate() - 29);
+      end = today;
+      break;
+    case 'all_time':
+      start = new Date(2020, 0, 1);
+      end = today;
+      break;
+  }
+  startInput.value = isoDate(start);
+  endInput.value = isoDate(end);
+}
+
+// Land on "Custom" showing the actual active dates — clearer than
+// silently guessing which preset the current range matches.
+document.getElementById('date-preset').value = 'custom';
+document.getElementById('custom-range-inputs').style.display = 'flex';
+</script>

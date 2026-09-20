@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% block title %}Business Dashboard — SmartPOS{% endblock %}
+{% block content %}
+<h1>Business Dashboard</h1>
+
+{% include "reports/_date_range_picker.html" %}
+
+<div style="display:flex; gap:8px; margin-bottom:16px;">
+  <a href="{{ url_for('reports.export_sales_csv', start=data.start, end=data.end) }}" class="btn btn-secondary btn-sm"><i class="fa-solid fa-file-csv"></i> Export Sales CSV</a>
+  <a href="{{ url_for('reports.export_refunds_csv', start=data.start, end=data.end) }}" class="btn btn-secondary btn-sm"><i class="fa-solid fa-file-csv"></i> Export Refunds CSV</a>
+</div>
+
+<div class="card-grid">
+  <div class="stat-card">
+    <div class="stat-label"><i class="fa-solid fa-dollar-sign"></i> Total Revenue</div>
+    <div class="stat-value">${{ "%.2f"|format(data.total_revenue) }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label"><i class="fa-solid fa-receipt"></i> Total Sales</div>
+    <div class="stat-value">{{ data.total_sales }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label"><i class="fa-solid fa-chart-line"></i> Estimated Profit</div>
+    <div class="stat-value">${{ "%.2f"|format(data.estimated_profit) }}</div>
+  </div>
+  <div class="stat-card" style="{{ 'border-left:4px solid var(--danger);' if data.low_stock_count > 0 }}">
+    <div class="stat-label"><i class="fa-solid fa-triangle-exclamation"></i> Low Stock Items</div>
+    <div class="stat-value" style="{{ 'color:var(--danger)' if data.low_stock_count > 0 }}">{{ data.low_stock_count }}</div>
+  </div>
+</div>
+
+<h2>Sales Trend</h2>
+<div class="card"><canvas id="revenueTrendChart" height="80"></canvas></div>
+
+<div class="card-grid" style="grid-template-columns: 1fr 1fr;">
+  <div class="card">
+    <h2 style="margin-top:0;">Top-Selling Categories</h2>
+    <canvas id="categoryChart" height="140"></canvas>
+  </div>
+  <div class="card">
+    <h2 style="margin-top:0;">Payment Method</h2>
+    <canvas id="paymentChart" height="140"></canvas>
+  </div>
+</div>
+
+<div class="card-grid" style="grid-template-columns: 1fr 1fr;">
+  <div class="card">
+    <h2 style="margin-top:0;">Top-Selling Products</h2>
+    <table>
+      <tr><th>Product</th><th>Revenue</th></tr>
+      {% for p in data.best_sellers %}
+      <tr><td>{{ p.name }}</td><td>${{ "%.2f"|format(p.total_revenue) }}</td></tr>
+      {% else %}<tr><td colspan="2" style="color:var(--text-muted);">No sales yet.</td></tr>{% endfor %}
+    </table>
+  </div>
+  <div class="card">
+    <h2 style="margin-top:0;">Lowest-Selling Products</h2>
+    <table>
+      <tr><th>Product</th><th>Revenue</th></tr>
+      {% for p in data.lowest_sellers %}
+      <tr><td>{{ p.name }}</td><td>${{ "%.2f"|format(p.total_revenue) }}</td></tr>
+      {% else %}<tr><td colspan="2" style="color:var(--text-muted);">No sales yet.</td></tr>{% endfor %}
+    </table>
+  </div>
+</div>
+
+<h2>Actionable Inventory &amp; Restock Intelligence</h2>
+<div class="card">
+  <table>
+    <tr><th>Product</th><th>Units Sold</th><th>Current Stock</th><th>Status</th></tr>
+    {% for p in data.restock_intelligence %}
+    <tr>
+      <td>{{ p.name }} <span style="color:var(--text-muted); font-size:12px;">({{ p.category or '—' }})</span></td>
+      <td>{{ p.units_sold }}</td>
+      <td>{{ p.quantity_in_stock }}</td>
+      <td>
+        {% if p.quantity_in_stock <= p.low_stock_threshold %}
+          <span class="badge badge-low">Low Stock</span>
+        {% else %}
+          <span class="badge badge-ok">Well Stocked</span>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+
+<script>
+const trendLabels = {{ data.revenue_trend | map(attribute='sale_date') | map('string') | list | tojson }};
+const trendValues = {{ data.revenue_trend | map(attribute='total_revenue') | map('float') | list | tojson }};
+try {
+  new Chart(document.getElementById('revenueTrendChart'), {
+  type: 'line',
+  data: { labels: trendLabels, datasets: [{ label: 'Sales Revenue', data: trendValues, borderColor: '#7D39EB', backgroundColor: 'rgba(125,57,235,0.08)', fill: true, tension: 0.3 }] },
+  options: { plugins: { legend: { display: true } } }
+});
+} catch (e) { console.error('Chart failed:', e); }
+
+const catLabels = {{ data.category_revenue | map(attribute='category') | list | tojson }};
+const catValues = {{ data.category_revenue | map(attribute='total_revenue') | map('float') | list | tojson }};
+try {
+  new Chart(document.getElementById('categoryChart'), {
+  type: 'bar',
+  data: { labels: catLabels, datasets: [{ label: 'Revenue', data: catValues, backgroundColor: '#C6FF33' }] },
+  options: { indexAxis: 'y', plugins: { legend: { display: false } } }
+});
+} catch (e) { console.error('Chart failed:', e); }
+
+const payLabels = {{ data.payment_methods | map(attribute='payment_method') | map('replace', '_', ' ') | map('capitalize') | list | tojson }};
+const payValues = {{ data.payment_methods | map(attribute='total_revenue') | map('float') | list | tojson }};
+try {
+  new Chart(document.getElementById('paymentChart'), {
+  type: 'pie',
+  data: { labels: payLabels, datasets: [{ data: payValues, backgroundColor: ['#7D39EB', '#C6FF33', '#000000', '#CFCFD3'] }] }
+});
+} catch (e) { console.error('Chart failed:', e); }
+</script>
+{% endblock %}

@@ -1,0 +1,176 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — SmartPOS{% endblock %}
+{% block content %}
+<h1>Welcome, {{ current_user.name }}</h1>
+<p class="subtitle">Signed in as {{ current_user.role_name.replace('_', ' ') }}</p>
+
+<div class="card" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:14px;">
+  <div>
+    {% if current_user.shift_name %}
+      <div style="font-size:12.5px; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px;">Your Shift</div>
+      <div style="font-size:16px; font-weight:600;">
+        {{ current_user.shift_name }}
+        {% if current_user.shift_start and current_user.shift_end %}
+          ({{ format_shift_time(current_user.shift_start) }}–{{ format_shift_time(current_user.shift_end) }})
+        {% endif %}
+      </div>
+    {% else %}
+      <div style="color:var(--text-muted); font-size:14px;">No shift assigned yet.</div>
+    {% endif %}
+    {% if clock_status %}
+      <div style="font-size:13px; color:var(--success); margin-top:4px;"><i class="fa-solid fa-circle-check"></i> Clocked in since {{ clock_status.clock_in }}</div>
+      {% if clock_status.starting_cash is not none %}
+      <div style="font-size:13px; color:var(--text-muted); margin-top:2px;">Starting cash: ${{ "%.2f"|format(clock_status.starting_cash) }}</div>
+      {% endif %}
+    {% else %}
+      <div style="font-size:13px; color:var(--text-muted); margin-top:4px;"><i class="fa-solid fa-circle"></i> Not clocked in</div>
+    {% endif %}
+  </div>
+  <div>
+    {% if clock_status %}
+    <form method="POST" action="{{ url_for('attendance.clock_out') }}" style="display:flex; gap:8px; align-items:center;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      {% if 'process_sale' in permissions %}
+      <input type="number" name="counted_cash" step="0.01" min="0"
+             placeholder="{% if clock_status.starting_cash is not none %}Counted cash (started with ${{ '%.2f'|format(clock_status.starting_cash) }}){% else %}Counted cash (optional){% endif %}"
+             style="width:260px;">
+      {% endif %}
+      <button type="submit" class="btn btn-danger"><i class="fa-solid fa-right-from-bracket"></i> Clock Out</button>
+    </form>
+    {% else %}
+    <form method="POST" action="{{ url_for('attendance.clock_in') }}" style="display:flex; gap:8px; align-items:center;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      {% if 'process_sale' in permissions %}
+      <input type="number" name="starting_cash" step="0.01" min="0" placeholder="Starting cash (optional)" style="width:170px;">
+      {% endif %}
+      <button type="submit" class="btn btn-lime"><i class="fa-solid fa-right-to-bracket"></i> Clock In</button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+
+<div class="card-grid">
+  {% if my_stats %}
+  <div class="stat-card">
+    <div class="stat-label">Your Sales Today</div>
+    <div class="stat-value">{{ my_stats.num_sales }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Your Revenue Today</div>
+    <div class="stat-value">${{ "%.2f"|format(my_stats.revenue) }}</div>
+  </div>
+  {% endif %}
+
+  {% if today_stats %}
+  <div class="stat-card">
+    <div class="stat-label">Shop Sales Today</div>
+    <div class="stat-value">{{ today_stats.num_sales }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Shop Revenue Today</div>
+    <div class="stat-value">${{ "%.2f"|format(today_stats.revenue) }}</div>
+  </div>
+  {% endif %}
+
+  {% if stock_stats %}
+  <div class="stat-card">
+    <div class="stat-label">Total Products</div>
+    <div class="stat-value">{{ stock_stats.total_products }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Low Stock Items</div>
+    <div class="stat-value" style="{{ 'color:var(--red)' if stock_stats.low_stock_count > 0 }}">{{ stock_stats.low_stock_count }}</div>
+  </div>
+  {% endif %}
+</div>
+
+<h2>Quick Actions</h2>
+<div class="card-grid">
+  {% if 'process_sale' in permissions %}
+  <a href="{{ url_for('sales.checkout_page') }}" class="stat-card" style="text-decoration:none; display:block;">
+    <div class="stat-label"><i class="fa-solid fa-cash-register"></i> Checkout</div>
+    <div class="stat-value" style="font-size:17px;">Start a new sale &rarr;</div>
+  </a>
+  {% endif %}
+  {% if 'manage_products' in permissions or 'adjust_stock' in permissions %}
+  <a href="{{ url_for('products.list_products') }}" class="stat-card" style="text-decoration:none; display:block;">
+    <div class="stat-label"><i class="fa-solid fa-boxes-stacked"></i> Products &amp; Stock</div>
+    <div class="stat-value" style="font-size:17px;">Manage inventory &rarr;</div>
+  </a>
+  {% endif %}
+  {% if 'view_reports' in permissions %}
+  <a href="{{ url_for('reports.index') }}" class="stat-card" style="text-decoration:none; display:block;">
+    <div class="stat-label"><i class="fa-solid fa-sack-dollar"></i> Reports</div>
+    <div class="stat-value" style="font-size:17px;">View sales report &rarr;</div>
+  </a>
+  {% endif %}
+</div>
+
+{% if my_tasks %}
+<h2>My Tasks</h2>
+<div class="card">
+  <table>
+    <tr><th>Task</th><th>Assigned By</th><th>Status</th><th>Action</th></tr>
+    {% for t in my_tasks %}
+    <tr>
+      <td>
+        <strong>{{ t.title }}</strong>
+        {% if t.description %}<br><span style="color:var(--text-muted); font-size:12.5px;">{{ t.description }}</span>{% endif %}
+      </td>
+      <td>{{ t.assigned_by_name }}</td>
+      <td>
+        {% if t.is_completed %}
+          <span class="badge badge-ok">Completed</span>
+        {% else %}
+          <span class="badge badge-low">Pending</span>
+        {% endif %}
+      </td>
+      <td>
+        {% if not t.is_completed %}
+        <form method="POST" action="{{ url_for('tasks.complete_task', task_id=t.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="btn btn-lime btn-sm"><i class="fa-solid fa-check"></i> Mark Done</button>
+        </form>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+{% endif %}
+
+{% if recent_sales %}
+<h2>Recent Sales</h2>
+<div class="card">
+  <table>
+    <tr><th>Receipt</th><th>Cashier</th><th>Total</th><th>Payment</th><th>When</th></tr>
+    {% for s in recent_sales %}
+    <tr>
+      <td>#{{ s.id }}</td>
+      <td>{{ s.cashier_name }}</td>
+      <td>${{ "%.2f"|format(s.total_amount) }}</td>
+      <td style="text-transform:uppercase; font-size:12px;">{{ s.payment_method }}</td>
+      <td style="color:var(--text-muted); font-size:13px;">{{ s.created_at }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+{% endif %}
+
+{% if low_stock %}
+<h2>Low Stock Alerts</h2>
+<div class="card">
+  <table>
+    <tr><th>Product</th><th>Category</th><th>In Stock</th><th>Threshold</th></tr>
+    {% for p in low_stock %}
+    <tr>
+      <td>{{ p.name }}</td>
+      <td>{{ p.category or '—' }}</td>
+      <td><span class="badge badge-low">{{ p.quantity_in_stock }}</span></td>
+      <td>{{ p.low_stock_threshold }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+{% endif %}
+{% endblock %}

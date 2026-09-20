@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}To-Do List — SmartPOS{% endblock %}
+{% block content %}
+<div style="display:flex; justify-content:space-between; align-items:flex-start;">
+  <div>
+    <h1>To-Do List</h1>
+    <p class="subtitle">Assign tasks to staff and track what's been completed.</p>
+  </div>
+  <a href="{{ url_for('staff.list_staff') }}" class="btn btn-secondary"><i class="fa-solid fa-xmark"></i> Exit</a>
+</div>
+
+<div class="card" style="max-width:520px;">
+  <h2 style="margin-top:0;">Assign a New Task</h2>
+  <form method="POST" action="{{ url_for('tasks.new_task') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label>Assign To</label>
+    <select name="assigned_to" required>
+      {% for u in staff %}
+      <option value="{{ u.id }}">{{ u.name }} ({{ u.role_name.replace('_', ' ') }})</option>
+      {% endfor %}
+    </select>
+
+    <label>Task Title</label>
+    <input type="text" name="title" placeholder="e.g. Add new snack items to inventory" required>
+
+    <label>Description (optional)</label>
+    <input type="text" name="description" placeholder="Any extra detail...">
+
+    <button type="submit" class="btn btn-primary" style="margin-top:16px;"><i class="fa-solid fa-plus"></i> Assign Task</button>
+  </form>
+</div>
+
+<h2>All Tasks</h2>
+<div class="card">
+  <table>
+    <tr><th>Task</th><th>Assigned To</th><th>Assigned By</th><th>Status</th><th>Actions</th></tr>
+    {% for t in tasks %}
+    <tr>
+      <td>
+        <strong>{{ t.title }}</strong>
+        {% if t.description %}<br><span style="color:var(--text-muted); font-size:12.5px;">{{ t.description }}</span>{% endif %}
+      </td>
+      <td>{{ t.assigned_to_name }}</td>
+      <td>{{ t.assigned_by_name }}</td>
+      <td>
+        {% if t.is_completed %}
+          <span class="badge badge-ok">Completed</span>
+        {% else %}
+          <span class="badge badge-low">Pending</span>
+        {% endif %}
+      </td>
+      <td>
+        {% if not t.is_completed %}
+        <form method="POST" action="{{ url_for('tasks.complete_task', task_id=t.id) }}" style="display:inline;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="btn btn-secondary btn-sm"><i class="fa-solid fa-check"></i> Mark Done</button>
+        </form>
+        {% endif %}
+        <form method="POST" action="{{ url_for('tasks.delete_task', task_id=t.id) }}" style="display:inline;" onsubmit="return confirm('Remove this task?');">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="btn btn-danger btn-sm"><i class="fa-solid fa-trash"></i></button>
+        </form>
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="5" style="color:var(--text-muted);">No tasks assigned yet.</td></tr>
+    {% endfor %}
+  </table>
+</div>
+{% endblock %}

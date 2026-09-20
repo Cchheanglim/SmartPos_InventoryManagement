@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Suppliers — SmartPOS{% endblock %}
+{% block content %}
+<h1>Suppliers</h1>
+<p class="subtitle">Manage your supplier directory for products and purchase orders.</p>
+
+<div class="card" style="max-width:520px;">
+  <h3 style="margin-top:0;">{{ 'Edit Supplier' if editing else 'New Supplier' }}</h3>
+  <form method="POST" action="{{ url_for('supplier.update_supplier', supplier_id=editing.id) if editing else url_for('supplier.create_supplier') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label>Name</label>
+    <input type="text" name="name" value="{{ editing.name if editing else '' }}" required>
+
+    <div class="form-row">
+      <div>
+        <label>Contact Name</label>
+        <input type="text" name="contact_name" value="{{ editing.contact_name if editing else '' }}">
+      </div>
+      <div>
+        <label>Phone</label>
+        <input type="text" name="phone" value="{{ editing.phone if editing else '' }}">
+      </div>
+    </div>
+
+    <label>Email</label>
+    <input type="email" name="email" value="{{ editing.email if editing else '' }}">
+
+    <label>Address</label>
+    <input type="text" name="address" value="{{ editing.address if editing else '' }}">
+
+    <div style="margin-top:16px;">
+      <button type="submit" class="btn btn-primary">{{ 'Save Changes' if editing else 'Add Supplier' }}</button>
+      {% if editing %}
+      <a href="{{ url_for('supplier.list_suppliers') }}" class="btn btn-secondary">Cancel</a>
+      {% endif %}
+    </div>
+  </form>
+</div>
+
+<div class="card">
+  <table>
+    <tr><th>Name</th><th>Contact</th><th>Phone</th><th>Email</th><th>Actions</th></tr>
+    {% for s in suppliers %}
+    <tr>
+      <td>{{ s.name }}</td>
+      <td>{{ s.contact_name or '—' }}</td>
+      <td>{{ s.phone or '—' }}</td>
+      <td>{{ s.email or '—' }}</td>
+      <td style="display:flex; gap:6px;">
+        <a href="{{ url_for('supplier.edit_supplier', supplier_id=s.id) }}" class="btn btn-secondary btn-sm"><i class="fa-solid fa-pen"></i> Edit</a>
+        <form method="POST" action="{{ url_for('supplier.delete_supplier', supplier_id=s.id) }}" onsubmit="return confirm('Delete this supplier?');">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="btn btn-danger btn-sm"><i class="fa-solid fa-trash"></i> Delete</button>
+        </form>
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="5" style="color:var(--text-muted);">No suppliers yet.</td></tr>
+    {% endfor %}
+  </table>
+</div>
+{% endblock %}

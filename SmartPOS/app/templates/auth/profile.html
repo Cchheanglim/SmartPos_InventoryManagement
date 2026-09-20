@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}My Profile — SmartPOS{% endblock %}
+{% block content %}
+<h1>My Profile</h1>
+
+<div class="card" style="max-width:420px;">
+  {% if current_user.profile_picture %}
+    <img src="{{ url_for('static', filename='uploads/avatars/' + current_user.profile_picture) }}"
+         alt="Avatar" style="width:100px; height:100px; object-fit:cover; border-radius:50%; display:block; margin-bottom:16px; border:1px solid var(--border-color);">
+  {% else %}
+    <div style="width:100px; height:100px; border-radius:50%; background:var(--bg-color); display:flex; align-items:center; justify-content:center; margin-bottom:16px;">
+      <i class="fa-solid fa-user" style="font-size:36px; color:var(--text-muted);"></i>
+    </div>
+  {% endif %}
+
+  <p><strong>{{ current_user.name }}</strong></p>
+  <p class="subtitle" style="margin-bottom:20px;">{{ current_user.email }} &middot; {{ current_user.role_name.replace('_', ' ') }}</p>
+
+  <form method="POST" enctype="multipart/form-data">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label>Update Profile Picture</label>
+    <input type="file" name="avatar" accept="image/png,image/jpeg,image/gif,image/webp">
+    <button type="submit" class="btn btn-primary" style="margin-top:16px;"><i class="fa-solid fa-upload"></i> Upload</button>
+  </form>
+</div>
+
+<div class="card" style="max-width:420px;">
+  <h2 style="margin-top:0;"><i class="fa-solid fa-id-card"></i> Personal Information</h2>
+  <p class="subtitle" style="margin-top:-10px; margin-bottom:16px;">Your name is shown throughout the app (receipts, staff list, task assignments). Phone is used to send you a password reset link via Telegram if you ever get locked out.</p>
+  <form method="POST" action="{{ url_for('profile.update_info') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label>Name</label>
+    <input type="text" name="name" value="{{ current_user.name }}" required>
+    <label>Phone Number</label>
+    <input type="tel" name="phone" value="{{ current_user.phone or '' }}" placeholder="e.g. 012345678">
+    <button type="submit" class="btn btn-primary" style="margin-top:16px;"><i class="fa-solid fa-check"></i> Save Changes</button>
+  </form>
+</div>
+
+<div class="card" style="max-width:420px;">
+  <h2 style="margin-top:0;"><i class="fa-solid fa-key"></i> Change Password</h2>
+  <form method="POST" action="{{ url_for('profile.change_password') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label>Current Password</label>
+    <input type="password" name="current_password" required>
+    <label>New Password</label>
+    <input type="password" name="new_password" required minlength="6">
+    <label>Confirm New Password</label>
+    <input type="password" name="confirm_password" required minlength="6">
+    <button type="submit" class="btn btn-primary" style="margin-top:16px;"><i class="fa-solid fa-key"></i> Update Password</button>
+  </form>
+</div>
+{% endblock %}

@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}{{ staff_member.name }}'s Permissions — SmartPOS{% endblock %}
+{% block content %}
+<h1>Individual Permissions</h1>
+<p class="subtitle">Grant {{ staff_member.name }} extra trust beyond their role ({{ staff_member.role_name.replace('_', ' ') }}). This never removes what their role already allows — it only ever adds.</p>
+
+<div class="card" style="max-width:480px;">
+  <form method="POST">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <table>
+      <tr><th>Permission</th><th style="text-align:center;">Granted</th></tr>
+      {% for perm in all_permissions %}
+      <tr>
+        <td>{{ perm.name.replace('_', ' ')|capitalize }}</td>
+        <td style="text-align:center;">
+          {% if perm.id in role_permission_ids %}
+            <input type="checkbox" checked disabled title="Already included in their role">
+          {% else %}
+            <input type="checkbox" name="extra_permissions" value="{{ perm.id }}"
+                   style="width:18px; height:18px;"
+                   {{ 'checked' if perm.id in current_extra_ids }}>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </table>
+
+    <p class="subtitle" style="margin-top:16px;">
+      <i class="fa-solid fa-lock"></i> Locked-checked boxes come from their <strong>{{ staff_member.role_name.replace('_', ' ') }}</strong> role — change those from Roles &amp; Permissions instead. Only the boxes you can click are individual grants specific to {{ staff_member.name }}.
+    </p>
+
+    <div style="margin-top:16px;">
+      <button type="submit" class="btn btn-primary"><i class="fa-solid fa-check"></i> Save Permissions</button>
+      <a href="{{ url_for('staff.list_staff') }}" class="btn btn-secondary">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

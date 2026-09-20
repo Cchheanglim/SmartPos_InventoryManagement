@@ -1,0 +1,719 @@
+{% extends "base.html" %}
+{% block title %}Checkout — SmartPOS{% endblock %}
+{% block content %}
+<h1>Checkout</h1>
+<p class="subtitle">Add items to the cart, then complete the sale.</p>
+
+<div class="checkout-grid">
+  <div class="card">
+    <div style="position:relative; margin-bottom:12px; display:flex; gap:8px;">
+      <div style="position:relative; flex:1;">
+        <i class="fa-solid fa-magnifying-glass" style="position:absolute; left:14px; top:50%; transform:translateY(-50%); color:var(--text-muted); font-size:13px;"></i>
+        <input type="text" id="product-search-input" placeholder="Search products by name or code..." style="padding-left:36px;" oninput="filterProducts()">
+      </div>
+      <button type="button" class="btn btn-secondary" style="flex-shrink:0;" onclick="openScanModal()">
+        <i class="fa-solid fa-barcode"></i> Scan
+      </button>
+    </div>
+    <div id="category-pills" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px;">
+      <button type="button" class="category-pill active" data-category="" onclick="setCategoryFilter('', this)">All</button>
+      {% for c in categories %}
+      <button type="button" class="category-pill" data-category="{{ c }}" onclick="setCategoryFilter('{{ c|e }}', this)">{{ c }}</button>
+      {% endfor %}
+    </div>
+    <div id="product-list-empty" style="display:none; color:var(--text-muted); padding:12px 0;">No products match your search.</div>
+    <div class="product-grid">
+    {% for p in products %}
+    <div class="product-card" data-search="{{ (p.name ~ ' ' ~ (p.sku or ''))|lower }}"
+         data-category="{{ p.category or '' }}"
+         data-id="{{ p.id }}" data-sku="{{ (p.sku or '')|lower }}" data-name="{{ p.name|e }}"
+         data-price="{{ p.price }}" data-stock="{{ p.quantity_in_stock }}">
+      {% if p.image_filename %}
+        <img src="{{ url_for('static', filename='uploads/products/' + p.image_filename) }}" alt="{{ p.name }}" class="product-card-img">
+      {% elif p.image_url %}
+        <img src="{{ p.image_url }}" alt="{{ p.name }}" class="product-card-img" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+        <div class="product-card-img-fallback" style="display:none;">
+          <i class="fa-solid {{ category_icon(p.category) }}"></i>
+        </div>
+      {% else %}
+        <div class="product-card-img-fallback">
+          <i class="fa-solid {{ category_icon(p.category) }}"></i>
+        </div>
+      {% endif %}
+      <div class="product-card-name">{{ p.name }}</div>
+      <div class="product-card-meta">${{ "%.2f"|format(p.price) }} &middot; {{ p.quantity_in_stock }} in stock</div>
+      {% if p.sku %}<div class="product-card-sku">{{ p.sku }}</div>{% endif %}
+      <button type="button" class="btn btn-secondary btn-sm product-card-add"
+              onclick="addToCart({{ p.id }}, '{{ p.name|e }}', {{ p.price }}, {{ p.quantity_in_stock }})"
+              {{ 'disabled' if p.quantity_in_stock == 0 }}>
+        <i class="fa-solid fa-plus"></i> Add
+      </button>
+    </div>
+    {% else %}
+    <p style="color:var(--text-muted);">No products found.</p>
+    {% endfor %}
+    </div>
+  </div>
+
+  <div class="card" id="order-panel">
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+      <h2 style="margin-top:0;">Current Order</h2>
+      <button type="button" class="btn btn-secondary btn-sm" onclick="openHeldOrdersModal()">
+        <i class="fa-solid fa-pause"></i> Held Orders <span id="held-count-badge" style="display:none;"></span>
+      </button>
+    </div>
+    <div id="cart-lines"><p style="color:var(--text-muted); font-size:14px;">Cart is empty.</p></div>
+
+    <div id="checkout-error" class="flash flash-error" style="display:none;"></div>
+
+    <label>Customer Phone (optional)</label>
+    <div style="display:flex; gap:6px;">
+      <input type="text" id="customer_phone" placeholder="e.g. 012345678" oninput="clearCustomerStatus()">
+      <button type="button" class="btn btn-secondary btn-sm" onclick="lookupCustomer()" style="flex-shrink:0;">Find</button>
+    </div>
+    <div id="customer-status" style="font-size:12.5px; margin-top:6px;"></div>
+    <div id="new-customer-name-wrap" style="display:none;">
+      <label>New Customer Name</label>
+      <input type="text" id="customer_name" placeholder="Name to register">
+    </div>
+
+    <label>Discount (%)</label>
+    <input type="number" id="discount_percent" min="0" max="100" value="0" onchange="renderCart()">
+
+    <label>Tax (%)</label>
+    <input type="number" id="tax_percent" min="0" max="100" step="0.01" value="{{ default_tax_percent }}" onchange="renderCart()">
+
+    <label>Payment Method</label>
+    <select id="payment_method" onchange="toggleCashPanel()">
+      <option value="cash">Cash</option>
+      <option value="qr">QR Code Payment</option>
+      <option value="credit_card">Credit Card</option>
+    </select>
+
+    <div class="cart-total" style="font-size:13px; color:var(--text-muted); font-weight:400;">
+      <span>Subtotal after discount</span>
+      <span id="cart-subtotal-display">$0.00</span>
+    </div>
+    <div class="cart-total" style="font-size:13px; color:var(--text-muted); font-weight:400;">
+      <span>Tax</span>
+      <span id="cart-tax-display">$0.00</span>
+    </div>
+    <div class="cart-total">
+      <span>Total to Pay</span>
+      <span id="cart-total-display">$0.00</span>
+    </div>
+    <div style="text-align:right; font-size:12px; color:var(--text-muted); margin-top:-8px;">&asymp; <span id="cart-total-khr">0</span> Riel</div>
+
+    <div id="cash-panel" style="margin-top:14px;">
+      <label>Currency</label>
+      <div style="display:flex; gap:6px;">
+        <button type="button" class="btn btn-secondary btn-sm" id="btn-currency-usd" onclick="setCurrency('usd')" style="flex:1;">USD ($)</button>
+        <button type="button" class="btn btn-secondary btn-sm" id="btn-currency-khr" onclick="setCurrency('khr')" style="flex:1;">Riel</button>
+      </div>
+
+      <label>Quick Cash</label>
+      <div id="quick-cash-usd" style="display:flex; gap:6px; flex-wrap:wrap;">
+        <button type="button" class="btn btn-secondary btn-sm" onclick="setExactCash()">Exact</button>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="setCash(5)">$5</button>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="setCash(10)">$10</button>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="setCash(20)">$20</button>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="setCash(50)">$50</button>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="setCash(100)">$100</button>
+      </div>
+      <div id="quick-cash-khr" style="display:none; gap:6px; flex-wrap:wrap;">
+        <button type="button" class="btn btn-secondary btn-sm" onclick="setExactCash()">Exact</button>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="setCash(5000)">5,000</button>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="setCash(10000)">10,000</button>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="setCash(20000)">20,000</button>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="setCash(50000)">50,000</button>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="setCash(100000)">100,000</button>
+      </div>
+
+      <label id="received-label">Received Amount ($)</label>
+      <input type="number" step="0.01" min="0" id="received_amount" value="0.00" oninput="renderChange()">
+      <div id="insufficient-warning" style="display:none; color:var(--danger); font-size:12px; margin-top:4px;">
+        <i class="fa-solid fa-triangle-exclamation"></i> Received amount is less than the total due.
+      </div>
+
+      <div class="cart-total" style="font-size:15px;">
+        <span>Change Due</span>
+        <span id="change-due-display">$0.00</span>
+      </div>
+    </div>
+
+    <button type="button" class="btn btn-secondary" style="width:100%; margin-top:10px;" onclick="holdCurrentOrder()">
+      <i class="fa-solid fa-pause"></i> Hold Order
+    </button>
+
+    <button type="button" class="btn btn-lime" style="width:100%; margin-top:8px;" id="submit-btn" disabled onclick="completeSale()">
+      <i class="fa-solid fa-check"></i> Complete Sale
+    </button>
+  </div>
+</div>
+
+<div id="held-orders-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.45); z-index:9998; align-items:center; justify-content:center;">
+  <div class="card" style="max-width:480px; width:100%; text-align:left;">
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+      <h2 style="margin-top:0;">Held Orders</h2>
+      <button type="button" class="btn btn-secondary btn-sm" onclick="closeHeldOrdersModal()"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div id="held-orders-list" style="max-height:400px; overflow-y:auto;">
+      <p style="color:var(--text-muted); font-size:14px;">Loading...</p>
+    </div>
+  </div>
+</div>
+
+<div id="scan-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.45); z-index:9998; align-items:center; justify-content:center;">
+  <div class="card" style="max-width:420px; width:100%; text-align:left;">
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+      <h2 style="margin-top:0;"><i class="fa-solid fa-barcode"></i> Scan Barcode</h2>
+      <button type="button" class="btn btn-secondary btn-sm" onclick="closeScanModal()"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div id="scan-reader" style="width:100%; border-radius:10px; overflow:hidden; background:#000; min-height:220px;"></div>
+    <div id="scan-status" style="font-size:12.5px; color:var(--text-muted); margin-top:10px; min-height:34px;">Requesting camera access...</div>
+    <div id="scan-error" class="flash flash-error" style="display:none; margin-top:8px;"></div>
+    <label style="margin-top:12px;">Or type the code manually</label>
+    <div style="display:flex; gap:6px;">
+      <input type="text" id="scan-manual-input" placeholder="e.g. SKU12345" onkeydown="if(event.key==='Enter'){handleScannedCode(this.value.trim()); this.value='';}">
+      <button type="button" class="btn btn-secondary btn-sm" onclick="const el=document.getElementById('scan-manual-input'); handleScannedCode(el.value.trim()); el.value='';">Add</button>
+    </div>
+  </div>
+</div>
+
+<div id="receipt-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.45); z-index:9999; align-items:center; justify-content:center;">
+  <div class="card" style="max-width:400px; width:100%; text-align:left;">
+    <h2 style="margin-top:0; text-align:center;">SmartPOS</h2>
+    <p class="subtitle" style="text-align:center; margin-top:-14px;">Receipt Summary</p>
+    <hr style="border:none; border-top:1px dashed var(--border-color); margin:12px 0;">
+    <div id="receipt-body" style="font-size:13.5px;"></div>
+    <div id="receipt-qr" style="text-align:center; margin:16px 0;"></div>
+    <div style="display:flex; gap:10px; margin-top:16px;">
+      <button type="button" class="btn btn-secondary" style="flex:1;" onclick="closeReceiptModal()">Close</button>
+      <button type="button" class="btn btn-primary" style="flex:1;" onclick="window.print()"><i class="fa-solid fa-print"></i> Print</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+<script>
+let cart = [];
+let currentTotal = 0;
+let currency = 'usd';
+const KHR_RATE = {{ khr_rate }};
+
+let activeCategory = '';
+
+function setCategoryFilter(category, btn) {
+  activeCategory = category;
+  document.querySelectorAll('#category-pills .category-pill').forEach(p => p.classList.remove('active'));
+  btn.classList.add('active');
+  filterProducts();
+}
+
+function filterProducts() {
+  const query = document.getElementById('product-search-input').value.trim().toLowerCase();
+  const items = document.querySelectorAll('.product-card');
+  let visibleCount = 0;
+  items.forEach(item => {
+    const haystack = item.getAttribute('data-search') || '';
+    const matchesSearch = haystack.includes(query);
+    const matchesCategory = !activeCategory || item.getAttribute('data-category') === activeCategory;
+    const matches = matchesSearch && matchesCategory;
+    item.style.display = matches ? '' : 'none';
+    if (matches) visibleCount++;
+  });
+  document.getElementById('product-list-empty').style.display = visibleCount === 0 ? 'block' : 'none';
+}
+
+// ---- Barcode scanning ----
+let scanner = null;
+let scanLock = false; // debounce so one barcode isn't added 10x while the frame lingers
+
+function openScanModal() {
+  document.getElementById('scan-modal').style.display = 'flex';
+  document.getElementById('scan-error').style.display = 'none';
+  document.getElementById('scan-status').textContent = 'Requesting camera access...';
+
+  if (!window.isSecureContext) {
+    showScanError(
+      'Camera blocked: this page is not a "secure context". Browsers only allow camera access on ' +
+      'https:// pages, or on http://localhost / http://127.0.0.1. If you are opening this on your ' +
+      'phone via your computer\'s network IP (e.g. http://192.168.x.x:5000), that\'s why it fails — ' +
+      'use the manual code entry below instead, or view the page from http://localhost:5000 on the same machine running the server.'
+    );
+    return;
+  }
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    showScanError('This browser does not support camera access (getUserMedia unavailable). Try Chrome, Edge, or Firefox, or use manual entry below.');
+    return;
+  }
+  if (typeof Html5Qrcode === 'undefined') {
+    showScanError('Scanner library failed to load — check your internet connection, or use manual entry below.');
+    return;
+  }
+
+  scanner = new Html5Qrcode("scan-reader");
+  scanner.start(
+    { facingMode: "environment" },
+    { fps: 10, qrbox: { width: 250, height: 150 } },
+    (decodedText) => onScanDetected(decodedText),
+    () => { /* fires continuously while no code is in frame — not an error, ignore */ }
+  ).then(() => {
+    document.getElementById('scan-status').textContent = 'Point the camera at a barcode.';
+  }).catch((err) => {
+    // Laptops with only a front-facing camera can reject "environment" mode — retry with default camera.
+    scanner.start(
+      { facingMode: "user" },
+      { fps: 10, qrbox: { width: 250, height: 150 } },
+      (decodedText) => onScanDetected(decodedText),
+      () => {}
+    ).then(() => {
+      document.getElementById('scan-status').textContent = 'Point the camera at a barcode.';
+    }).catch((err2) => diagnoseCameraError(err2));
+  });
+}
+
+function diagnoseCameraError(err) {
+  const msg = (err && (err.message || err.toString())) || 'Unknown error';
+  let hint = msg;
+  if (/NotAllowedError|Permission/i.test(msg)) {
+    hint = 'Camera permission was denied. Click the camera/lock icon in your browser\'s address bar and allow camera access for this site, then try again.';
+  } else if (/NotFoundError|no camera/i.test(msg)) {
+    hint = 'No camera was found on this device. Use manual entry below instead.';
+  } else if (/NotReadableError/i.test(msg)) {
+    hint = 'The camera is already in use by another app (e.g. Zoom, another browser tab). Close it and try again.';
+  } else if (/insecure/i.test(msg)) {
+    hint = 'Camera access requires https:// or localhost. See the note above about secure contexts.';
+  }
+  showScanError('Could not open camera: ' + hint);
+}
+
+function showScanError(message) {
+  document.getElementById('scan-status').textContent = '';
+  const errEl = document.getElementById('scan-error');
+  errEl.textContent = message;
+  errEl.style.display = 'block';
+}
+
+function onScanDetected(decodedText) {
+  if (scanLock) return;
+  scanLock = true;
+  handleScannedCode(decodedText);
+  setTimeout(() => { scanLock = false; }, 1200); // brief pause so the same item isn't scanned repeatedly
+}
+
+function handleScannedCode(code) {
+  if (!code) return;
+  const normalized = code.trim().toLowerCase();
+  const match = document.querySelector(`.product-card[data-sku="${CSS.escape(normalized)}"]`);
+  if (!match) {
+    showToast(`No product found with code "${code}".`, true);
+    return;
+  }
+  const id = parseInt(match.getAttribute('data-id'), 10);
+  const name = match.getAttribute('data-name');
+  const price = parseFloat(match.getAttribute('data-price'));
+  const stock = parseInt(match.getAttribute('data-stock'), 10);
+  if (stock <= 0) {
+    showToast(`${name} is out of stock.`, true);
+    return;
+  }
+  addToCart(id, name, price, stock);
+  showToast(`Added: ${name}`, false);
+}
+
+function closeScanModal() {
+  document.getElementById('scan-modal').style.display = 'none';
+  if (scanner) {
+    scanner.stop().then(() => scanner.clear()).catch(() => {});
+    scanner = null;
+  }
+}
+
+function toggleCashPanel() {
+  const panel = document.getElementById('cash-panel');
+  panel.style.display = document.getElementById('payment_method').value === 'cash' ? 'block' : 'none';
+  updateSubmitState();
+}
+
+function setCurrency(c) {
+  currency = c;
+  document.getElementById('btn-currency-usd').classList.toggle('btn-primary', c === 'usd');
+  document.getElementById('btn-currency-usd').classList.toggle('btn-secondary', c !== 'usd');
+  document.getElementById('btn-currency-khr').classList.toggle('btn-primary', c === 'khr');
+  document.getElementById('btn-currency-khr').classList.toggle('btn-secondary', c !== 'khr');
+  document.getElementById('quick-cash-usd').style.display = c === 'usd' ? 'flex' : 'none';
+  document.getElementById('quick-cash-khr').style.display = c === 'khr' ? 'flex' : 'none';
+  document.getElementById('received-label').textContent = c === 'usd' ? 'Received Amount ($)' : 'Received Amount (Riel)';
+  document.getElementById('received_amount').value = 0;
+  renderChange();
+}
+
+function setCash(amount) {
+  document.getElementById('received_amount').value = currency === 'usd' ? amount.toFixed(2) : amount;
+  renderChange();
+}
+
+function setExactCash() {
+  const val = currency === 'usd' ? currentTotal : Math.round(currentTotal * KHR_RATE);
+  document.getElementById('received_amount').value = currency === 'usd' ? val.toFixed(2) : val;
+  renderChange();
+}
+
+function renderChange() {
+  const rawReceived = parseFloat(document.getElementById('received_amount').value) || 0;
+  const receivedUsd = currency === 'usd' ? rawReceived : rawReceived / KHR_RATE;
+  const changeUsd = Math.max(receivedUsd - currentTotal, 0);
+  const display = currency === 'usd'
+    ? '$' + changeUsd.toFixed(2)
+    : Math.round(changeUsd * KHR_RATE).toLocaleString() + ' Riel';
+  document.getElementById('change-due-display').textContent = display;
+  updateSubmitState();
+}
+
+function updateSubmitState() {
+  const submitBtn = document.getElementById('submit-btn');
+  const warningEl = document.getElementById('insufficient-warning');
+  const paymentMethod = document.getElementById('payment_method').value;
+
+  if (cart.length === 0) {
+    submitBtn.disabled = true;
+    warningEl.style.display = 'none';
+    return;
+  }
+
+  if (paymentMethod === 'cash') {
+    const rawReceived = parseFloat(document.getElementById('received_amount').value) || 0;
+    const receivedUsd = currency === 'usd' ? rawReceived : rawReceived / KHR_RATE;
+    // A tiny epsilon avoids floating-point rounding blocking an exact payment.
+    const isSufficient = receivedUsd >= currentTotal - 0.001;
+    submitBtn.disabled = !isSufficient;
+    warningEl.style.display = isSufficient ? 'none' : 'block';
+  } else {
+    // QR and Credit Card payments have no cash-received concept to validate.
+    submitBtn.disabled = false;
+    warningEl.style.display = 'none';
+  }
+}
+
+function lookupCustomer() {
+  const phone = document.getElementById('customer_phone').value.trim();
+  const statusEl = document.getElementById('customer-status');
+  const nameWrap = document.getElementById('new-customer-name-wrap');
+  if (!phone) { statusEl.textContent = ''; return; }
+
+  statusEl.textContent = 'Looking up...';
+  fetch(`{{ url_for('sales.customer_lookup') }}?phone=${encodeURIComponent(phone)}`)
+    .then(r => r.json())
+    .then(data => {
+      if (data.found) {
+        statusEl.innerHTML = `<span style="color:var(--success);">Found: ${data.masked_tag}</span>`;
+        nameWrap.style.display = 'none';
+      } else {
+        statusEl.innerHTML = `<span style="color:var(--text-muted);">${data.message} You can register them below.</span>`;
+        nameWrap.style.display = 'block';
+      }
+    })
+    .catch(() => { statusEl.textContent = 'Lookup failed — you can still complete the sale.'; });
+}
+
+function clearCustomerStatus() {
+  document.getElementById('customer-status').textContent = '';
+  document.getElementById('new-customer-name-wrap').style.display = 'none';
+}
+
+function addToCart(id, name, price, maxStock) {
+  const existing = cart.find(item => item.product_id === id);
+  if (existing) {
+    if (existing.quantity < maxStock) existing.quantity += 1;
+  } else {
+    cart.push({ product_id: id, name: name, price: price, quantity: 1, maxStock: maxStock });
+  }
+  renderCart();
+}
+
+function removeFromCart(id) {
+  cart = cart.filter(item => item.product_id !== id);
+  renderCart();
+}
+
+function changeQty(id, delta) {
+  const item = cart.find(i => i.product_id === id);
+  if (!item) return;
+  item.quantity += delta;
+  if (item.quantity <= 0) { removeFromCart(id); return; }
+  if (item.quantity > item.maxStock) item.quantity = item.maxStock;
+  renderCart();
+}
+
+function renderCart() {
+  const linesEl = document.getElementById('cart-lines');
+  const totalEl = document.getElementById('cart-total-display');
+  const totalKhrEl = document.getElementById('cart-total-khr');
+  const subtotalEl = document.getElementById('cart-subtotal-display');
+  const taxEl = document.getElementById('cart-tax-display');
+  const discount = parseFloat(document.getElementById('discount_percent').value) || 0;
+  const tax = parseFloat(document.getElementById('tax_percent').value) || 0;
+
+  if (cart.length === 0) {
+    linesEl.innerHTML = '<p style="color:var(--text-muted); font-size:14px;">Cart is empty.</p>';
+    totalEl.textContent = '$0.00';
+    totalKhrEl.textContent = '0';
+    subtotalEl.textContent = '$0.00';
+    taxEl.textContent = '$0.00';
+    currentTotal = 0;
+  } else {
+    let subtotal = 0;
+    linesEl.innerHTML = cart.map(item => {
+      const lineTotal = item.price * item.quantity;
+      subtotal += lineTotal;
+      return `<div class="cart-line">
+        <div class="cart-line-info">
+          <div class="cart-line-name">${item.name}</div>
+          <div class="qty-stepper">
+            <button type="button" class="qty-btn" onclick="changeQty(${item.product_id}, -1)" aria-label="Decrease quantity">−</button>
+            <span class="qty-value">${item.quantity}</span>
+            <button type="button" class="qty-btn" onclick="changeQty(${item.product_id}, 1)" aria-label="Increase quantity">+</button>
+            <button type="button" class="qty-remove" onclick="removeFromCart(${item.product_id})" aria-label="Remove item"><i class="fa-solid fa-trash"></i></button>
+          </div>
+        </div>
+        <span class="cart-line-total">$${lineTotal.toFixed(2)}</span>
+      </div>`;
+    }).join('');
+    const discountedSubtotal = subtotal * (1 - discount / 100);
+    const taxAmount = discountedSubtotal * (tax / 100);
+    const total = discountedSubtotal + taxAmount;
+    currentTotal = total;
+    subtotalEl.textContent = '$' + discountedSubtotal.toFixed(2);
+    taxEl.textContent = '$' + taxAmount.toFixed(2);
+    totalEl.textContent = '$' + total.toFixed(2);
+    totalKhrEl.textContent = Math.round(total * KHR_RATE).toLocaleString();
+  }
+  renderChange();
+}
+
+// ---------- Hold Order ----------
+function holdCurrentOrder() {
+  if (cart.length === 0) {
+    showToast('Cart is empty — nothing to hold.', true);
+    return;
+  }
+  const payload = {
+    cart: cart,
+    discount_percent: parseFloat(document.getElementById('discount_percent').value) || 0,
+    customer_phone: document.getElementById('customer_phone').value.trim() || null,
+    customer_name: document.getElementById('customer_name').value.trim() || null,
+  };
+  fetch(`{{ url_for('sales.hold_order') }}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
+    body: JSON.stringify(payload),
+  })
+    .then(r => r.json())
+    .then(data => {
+      if (data.success) {
+        cart = [];
+        renderCart();
+        document.getElementById('customer_phone').value = '';
+        document.getElementById('customer_name').value = '';
+        document.getElementById('discount_percent').value = 0;
+        clearCustomerStatus();
+        showToast('Order held. You can resume it anytime from Held Orders.', false);
+        refreshHeldCount();
+      } else {
+        showToast(data.message || 'Could not hold this order.', true);
+      }
+    })
+    .catch(() => showToast('Could not hold this order — check your connection.', true));
+}
+
+function showToast(message, isError) {
+  const toast = document.createElement('div');
+  toast.textContent = message;
+  toast.style.cssText = `position:fixed; bottom:24px; left:50%; transform:translateX(-50%);
+    background:${isError ? 'var(--danger)' : 'var(--success)'}; color:white; padding:10px 18px;
+    border-radius:8px; font-size:13.5px; z-index:10000; box-shadow:var(--shadow-hover);`;
+  document.body.appendChild(toast);
+  setTimeout(() => toast.remove(), 2500);
+}
+
+function refreshHeldCount() {
+  fetch(`{{ url_for('sales.list_held_orders') }}`)
+    .then(r => r.json())
+    .then(data => {
+      const badge = document.getElementById('held-count-badge');
+      if (data.orders.length > 0) {
+        badge.textContent = `(${data.orders.length})`;
+        badge.style.display = 'inline';
+      } else {
+        badge.style.display = 'none';
+      }
+    })
+    .catch(() => {});  // badge count is a nice-to-have — fail silently, not user-blocking;
+}
+
+function openHeldOrdersModal() {
+  document.getElementById('held-orders-modal').style.display = 'flex';
+  const listEl = document.getElementById('held-orders-list');
+  listEl.innerHTML = '<p style="color:var(--text-muted); font-size:14px;">Loading...</p>';
+
+  fetch(`{{ url_for('sales.list_held_orders') }}`)
+    .then(r => {
+      if (!r.ok) throw new Error(`Server responded with ${r.status}`);
+      return r.json();
+    })
+    .then(data => {
+      if (data.orders.length === 0) {
+        listEl.innerHTML = '<p style="color:var(--text-muted); font-size:14px;">No held orders.</p>';
+        return;
+      }
+      listEl.innerHTML = data.orders.map(o => `
+        <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 0; border-bottom:1px solid var(--border-color);">
+          <div>
+            <strong>${o.item_count} item${o.item_count === 1 ? '' : 's'} &middot; $${o.estimated_total.toFixed(2)}</strong><br>
+            <span style="color:var(--text-muted); font-size:12px;">Held by ${o.cashier_name} &middot; ${o.held_at}${o.customer_name ? ' &middot; ' + o.customer_name : ''}${o.customer_phone ? ' (' + o.customer_phone + ')' : ''}</span>
+          </div>
+          <div style="display:flex; gap:6px;">
+            <button type="button" class="btn btn-primary btn-sm" onclick="resumeHeldOrder(${o.id})"><i class="fa-solid fa-play"></i> Resume</button>
+            <button type="button" class="btn btn-danger btn-sm" onclick="discardHeldOrder(${o.id})"><i class="fa-solid fa-trash"></i></button>
+          </div>
+        </div>
+      `).join('');
+    })
+    .catch(err => {
+      listEl.innerHTML = `
+        <p style="color:var(--danger); font-size:14px;"><i class="fa-solid fa-triangle-exclamation"></i> Could not load held orders (${err.message}).</p>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="openHeldOrdersModal()"><i class="fa-solid fa-rotate-right"></i> Retry</button>
+      `;
+    });
+}
+
+function closeHeldOrdersModal() {
+  document.getElementById('held-orders-modal').style.display = 'none';
+}
+
+function resumeHeldOrder(id) {
+  if (cart.length > 0 && !confirm('Your current cart has items — resuming will replace it. Continue?')) return;
+
+  fetch(`/checkout/held/${id}/resume`, { method: 'POST', headers: { 'X-CSRFToken': getCsrfToken() } })
+    .then(r => r.json())
+    .then(data => {
+      if (data.success) {
+        cart = data.cart;
+        document.getElementById('discount_percent').value = data.discount_percent;
+        document.getElementById('customer_phone').value = data.customer_phone || '';
+        document.getElementById('customer_name').value = data.customer_name || '';
+        renderCart();
+        closeHeldOrdersModal();
+        showToast('Order resumed.', false);
+        refreshHeldCount();
+      } else {
+        showToast(data.message || 'Could not resume this order.', true);
+        openHeldOrdersModal();  // refresh the list — it may have been resumed elsewhere
+      }
+    })
+    .catch(() => showToast('Could not resume this order — check your connection.', true));
+}
+
+function discardHeldOrder(id) {
+  if (!confirm('Discard this held order? This cannot be undone.')) return;
+  fetch(`/checkout/held/${id}/discard`, { method: 'POST', headers: { 'X-CSRFToken': getCsrfToken() } })
+    .then(r => r.json())
+    .then(data => {
+      if (data.success) {
+        openHeldOrdersModal();
+        refreshHeldCount();
+      } else {
+        showToast(data.message || 'Could not discard this order.', true);
+      }
+    });
+}
+
+refreshHeldCount();
+
+function completeSale() {
+  const errorEl = document.getElementById('checkout-error');
+  errorEl.style.display = 'none';
+
+  const paymentMethod = document.getElementById('payment_method').value;
+  if (paymentMethod === 'cash') {
+    const rawReceived = parseFloat(document.getElementById('received_amount').value) || 0;
+    const receivedUsd = currency === 'usd' ? rawReceived : rawReceived / KHR_RATE;
+    if (receivedUsd < currentTotal - 0.001) {
+      errorEl.textContent = 'Received amount is less than the total due — cannot complete this sale.';
+      errorEl.style.display = 'block';
+      return;
+    }
+  }
+
+  const payload = {
+    cart: cart.map(item => ({ product_id: item.product_id, quantity: item.quantity })),
+    discount_percent: parseFloat(document.getElementById('discount_percent').value) || 0,
+    tax_percent: parseFloat(document.getElementById('tax_percent').value) || 0,
+    payment_method: document.getElementById('payment_method').value,
+    customer_phone: document.getElementById('customer_phone').value.trim(),
+    customer_name: document.getElementById('customer_name').value.trim(),
+  };
+
+  fetch("{{ url_for('sales.submit_sale_async') }}", {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
+    body: JSON.stringify(payload),
+  })
+    .then(r => r.json().then(data => ({ status: r.status, data })))
+    .then(({ status, data }) => {
+      if (status !== 200 || !data.success) {
+        errorEl.textContent = data.message || 'Could not complete sale.';
+        errorEl.style.display = 'block';
+        return;
+      }
+      showReceiptModal(data.sale);
+    })
+    .catch(() => {
+      errorEl.textContent = 'Network error — could not complete sale.';
+      errorEl.style.display = 'block';
+    });
+}
+
+function showReceiptModal(sale) {
+  const itemsHtml = sale.items.map(i =>
+    `<div style="display:flex; justify-content:space-between; padding:3px 0;">
+      <span>${i.name} x${i.quantity}</span><span>$${i.line_total.toFixed(2)}</span>
+    </div>`
+  ).join('');
+
+  const customerLine = sale.masked_customer
+    ? `<div style="color:var(--text-muted);">Customer: ${sale.masked_customer}</div>` : '';
+
+  document.getElementById('receipt-body').innerHTML = `
+    <div style="color:var(--text-muted); margin-bottom:8px;">
+      Txn ID: SALE-${sale.id}<br>
+      Date: ${sale.created_at}<br>
+      Staff: ${sale.cashier_name}
+      ${customerLine}
+    </div>
+    <hr style="border:none; border-top:1px dashed var(--border-color); margin:8px 0;">
+    ${itemsHtml}
+    <hr style="border:none; border-top:1px dashed var(--border-color); margin:8px 0;">
+    <div style="display:flex; justify-content:space-between;"><span>Discount</span><span>${sale.discount_percent}%</span></div>
+    <div style="display:flex; justify-content:space-between;"><span>Tax</span><span>${sale.tax_percent}%</span></div>
+    <div style="display:flex; justify-content:space-between; font-weight:700; font-size:16px; margin-top:6px;"><span>Total</span><span>$${sale.total_amount.toFixed(2)}</span></div>
+    <div style="color:var(--text-muted); margin-top:6px;">Payment: ${sale.payment_method.replace('_', ' ').toUpperCase()}</div>
+  `;
+
+  const qrEl = document.getElementById('receipt-qr');
+  qrEl.innerHTML = sale.qr_data_uri
+    ? `<img src="${sale.qr_data_uri}" style="width:160px; height:160px; border-radius:8px;"><p style="font-size:11px; color:var(--text-muted);">Scan to pay $${sale.total_amount.toFixed(2)}</p>`
+    : '';
+
+  document.getElementById('receipt-modal').style.display = 'flex';
+}
+
+function closeReceiptModal() {
+  document.getElementById('receipt-modal').style.display = 'none';
+  window.location.reload();
+}
+
+setCurrency('usd');
+</script>
+{% endblock %}

@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Add Employee — SmartPOS{% endblock %}
+{% block content %}
+<h1>Add Employee</h1>
+<p class="subtitle">Create a login for a new staff member.</p>
+
+<form method="POST" enctype="multipart/form-data">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+  <div style="display:flex; gap:20px; align-items:flex-start; flex-wrap:wrap;">
+    <div style="flex:2; min-width:320px;">
+      <div class="card">
+        <h3 style="margin-top:0;">Basic Information</h3>
+        <div class="form-row">
+          <div>
+            <label>Full Name</label>
+            <input type="text" name="name" required>
+          </div>
+          <div>
+            <label>Role</label>
+            <select name="role_name" required>
+              {% for r in roles %}
+              <option value="{{ r.name }}" style="text-transform:capitalize;">{{ r.name.replace('_', ' ') }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div>
+            <label>Email</label>
+            <input type="email" name="email" required>
+          </div>
+          <div>
+            <label>Phone Number</label>
+            <input type="tel" name="phone" placeholder="e.g. 012345678">
+          </div>
+        </div>
+        <label>Temporary Password</label>
+        <input type="password" name="password" required minlength="6" placeholder="At least 6 characters">
+        <p class="subtitle" style="margin-top:6px;">They can change this later from their own Profile page.</p>
+      </div>
+    </div>
+
+    <div style="flex:1; min-width:260px;">
+      <div class="card">
+        <h3 style="margin-top:0;">Profile Photo</h3>
+        <p class="subtitle" style="margin-top:-6px;">Optional — can also be added later from their Edit page.</p>
+        <input type="file" name="avatar" accept="image/png,image/jpeg,image/gif,image/webp">
+      </div>
+    </div>
+  </div>
+
+  <div style="margin-top:8px;">
+    <button type="submit" class="btn btn-primary"><i class="fa-solid fa-user-plus"></i> Create Account</button>
+    <a href="{{ url_for('staff.list_staff') }}" class="btn btn-secondary">Cancel</a>
+  </div>
+</form>
+{% endblock %}

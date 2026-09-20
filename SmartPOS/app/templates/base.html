@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>{% block title %}SmartPOS{% endblock %}</title>
+  <meta name="csrf-token" content="{{ csrf_token() }}">
+  <script>
+    // Runs before the page paints, so there's no flash of the wrong theme.
+    (function() {
+      var saved = localStorage.getItem('smartpos-theme') || 'light';
+      document.documentElement.setAttribute('data-theme', saved);
+    })();
+  </script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+</head>
+<body>
+{% if current_user.is_authenticated %}
+<div class="bg-blobs" aria-hidden="true">
+  <span class="blob blob-violet"></span>
+  <span class="blob blob-lime"></span>
+</div>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="brand"><i class="fa-solid fa-cash-register"></i> SmartPOS</div>
+    <nav>
+      <a href="{{ url_for('dashboard.index') }}" class="{{ 'active' if request.endpoint == 'dashboard.index' }}">
+        <i class="fa-solid fa-house"></i><span>My Dashboard</span>
+      </a>
+      {% if 'view_reports' in permissions %}
+      <a href="{{ url_for('reports.index') }}" class="{{ 'active' if request.endpoint == 'reports.index' }}">
+        <i class="fa-solid fa-chart-pie"></i><span>Business Dashboard</span>
+      </a>
+      <a href="{{ url_for('reports.business_health') }}" class="{{ 'active' if request.endpoint == 'reports.business_health' }}">
+        <i class="fa-solid fa-sack-dollar"></i><span>Business Health</span>
+      </a>
+      <a href="{{ url_for('reports.crm_dashboard') }}" class="{{ 'active' if request.endpoint == 'reports.crm_dashboard' }}">
+        <i class="fa-solid fa-address-book"></i><span>CRM Dashboard</span>
+      </a>
+      {% endif %}
+      {% if 'manage_products' in permissions or 'adjust_stock' in permissions %}
+      <a href="{{ url_for('products.list_products') }}" class="{{ 'active' if request.blueprint == 'products' }}">
+        <i class="fa-solid fa-boxes-stacked"></i><span>Products &amp; Stock</span>
+      </a>
+      {% endif %}
+      {% if 'process_sale' in permissions %}
+      <a href="{{ url_for('sales.checkout_page') }}" class="{{ 'active' if request.blueprint == 'sales' and request.endpoint != 'sales.sales_history' }}">
+        <i class="fa-solid fa-cash-register"></i><span>Checkout</span>
+      </a>
+      <a href="{{ url_for('sales.sales_history') }}" class="{{ 'active' if request.endpoint == 'sales.sales_history' }}">
+        <i class="fa-solid fa-clock-rotate-left"></i><span>Sales History</span>
+      </a>
+      {% endif %}
+      {% if 'manage_users' in permissions %}
+      <a href="{{ url_for('staff.list_staff') }}" class="{{ 'active' if request.blueprint == 'staff' }}">
+        <i class="fa-solid fa-users-gear"></i><span>Manage Staff</span>
+      </a>
+      {% endif %}
+    </nav>
+    <div class="user-box">
+      <div style="margin-top:12px;"><a href="{{ url_for('auth.logout') }}"><i class="fa-solid fa-arrow-right-from-bracket"></i> Log out</a></div>
+    </div>
+  </aside>
+
+  <div class="content-col">
+    <header class="top-header">
+      <div style="font-weight:600; font-size:15px;">{% block page_title %}{% endblock %}</div>
+      <div style="display:flex; align-items:center; gap:20px;">
+        <button type="button" id="theme-toggle" onclick="toggleTheme()"
+                style="background:none; border:1px solid var(--border-color); border-radius:20px; width:38px; height:38px; cursor:pointer; display:flex; align-items:center; justify-content:center; color:var(--text-muted);">
+          <i class="fa-solid fa-moon" id="theme-icon"></i>
+        </button>
+        <div id="live-clock" style="color:var(--text-muted); font-size:13.5px; font-weight:500;">--:--:--</div>
+        <a href="{{ url_for('notification.list_notifications') }}" style="position:relative; color:var(--text-muted); text-decoration:none; display:flex; align-items:center;">
+          <i class="fa-solid fa-bell" style="font-size:18px;"></i>
+          {% if unread_notification_count %}
+          <span style="position:absolute; top:-8px; right:-8px; background:#e11d48; color:white; font-size:10px; font-weight:700; border-radius:10px; padding:1px 5px; min-width:16px; text-align:center;">{{ unread_notification_count }}</span>
+          {% endif %}
+        </a>
+        <a href="{{ url_for('profile.my_profile') }}" style="display:flex; align-items:center; gap:10px; text-decoration:none; color:inherit; border-left:1px solid var(--border-color); padding-left:18px;">
+          {% if current_user.profile_picture %}
+            <img src="{{ url_for('static', filename='uploads/avatars/' + current_user.profile_picture) }}" alt="Avatar" style="width:34px; height:34px; border-radius:50%; object-fit:cover;">
+          {% else %}
+            <div style="width:34px; height:34px; border-radius:50%; background:var(--bg-color); display:flex; align-items:center; justify-content:center;">
+              <i class="fa-solid fa-user" style="color:var(--text-muted); font-size:14px;"></i>
+            </div>
+          {% endif %}
+          <div style="display:flex; flex-direction:column; line-height:1.2;">
+            <span style="font-size:13.5px; font-weight:600;">{{ current_user.name }}</span>
+            <span style="font-size:11.5px; color:var(--text-muted); text-transform:capitalize;">{{ current_user.role_name.replace('_', ' ') }}</span>
+          </div>
+        </a>
+      </div>
+    </header>
+    <main class="main">
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% for category, message in messages %}
+          <div class="flash flash-{{ category }}">{{ message }}</div>
+        {% endfor %}
+      {% endwith %}
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+</div>
+
+<script>
+function getCsrfToken() {
+  return document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+}
+
+function updateClock() {
+  const now = new Date();
+  document.getElementById('live-clock').textContent = now.toLocaleTimeString();
+}
+updateClock();
+setInterval(updateClock, 1000);
+
+function applyTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  const icon = document.getElementById('theme-icon');
+  if (icon) icon.className = theme === 'dark' ? 'fa-solid fa-sun' : 'fa-solid fa-moon';
+}
+
+function toggleTheme() {
+  const current = document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+  const next = current === 'dark' ? 'light' : 'dark';
+  localStorage.setItem('smartpos-theme', next);
+  applyTheme(next);
+}
+
+// The <head> script already set data-theme before paint — this just
+// makes sure the icon matches it.
+applyTheme(document.documentElement.getAttribute('data-theme') || 'light');
+</script>
+{% else %}
+  {% block guest_content %}{% endblock %}
+{% endif %}
+</body>
+</html>

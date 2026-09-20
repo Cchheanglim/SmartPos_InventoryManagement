@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+{% block title %}Products — SmartPOS{% endblock %}
+{% block content %}
+<h1>Products &amp; Stock</h1>
+<p class="subtitle">Manage the product catalog and adjust stock levels.</p>
+
+<div class="card">
+  <div class="form-row" style="align-items:flex-end;">
+    <div>
+      <label>Search by name or SKU</label>
+      <input type="text" id="product-search-input" placeholder="e.g. rice" oninput="filterProductsTable()">
+    </div>
+    {% if 'manage_products' in permissions %}
+    <div style="flex:0; margin-left:auto; display:flex; gap:8px;">
+      <a href="{{ url_for('products.export_products_csv') }}" class="btn btn-secondary"><i class="fa-solid fa-file-csv"></i> Export CSV</a>
+      {% if 'adjust_stock' in permissions %}
+      <a href="{{ url_for('products.list_purchase_orders') }}" class="btn btn-secondary"><i class="fa-solid fa-file-invoice"></i> Purchase Orders</a>
+      {% endif %}
+      <a href="{{ url_for('products.new_product') }}" class="btn btn-primary"><i class="fa-solid fa-plus"></i> New Product</a>
+    </div>
+    {% endif %}
+  </div>
+  <div id="category-pills" style="display:flex; gap:8px; flex-wrap:wrap; margin-top:14px;">
+    <button type="button" class="category-pill active" data-category="" onclick="setCategoryFilter('', this)">All</button>
+    {% for c in categories %}
+    <button type="button" class="category-pill" data-category="{{ c }}" onclick="setCategoryFilter('{{ c|e }}', this)">{{ c }}</button>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="card">
+  <table>
+    <tr>
+      <th>Image</th><th>SKU</th><th>Name</th><th>Category</th><th>Price</th><th>Stock</th><th>Actions</th>
+    </tr>
+    {% for p in products %}
+    <tr class="product-row" data-search="{{ (p.name ~ ' ' ~ (p.sku or ''))|lower }}" data-category="{{ p.category or '' }}">
+      <td>
+        {% if p.image_filename %}
+          <img src="{{ url_for('static', filename='uploads/products/' + p.image_filename) }}" alt="{{ p.name }}" style="width:44px; height:44px; object-fit:cover; border-radius:6px;">
+        {% elif p.image_url %}
+          <img src="{{ p.image_url }}" alt="{{ p.name }}" style="width:44px; height:44px; object-fit:cover; border-radius:6px;" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+          <div style="display:none; width:44px; height:44px; border-radius:6px; background:var(--bg-color); align-items:center; justify-content:center;">
+            <i class="fa-solid {{ category_icon(p.category) }}" style="color:var(--text-muted); font-size:16px;"></i>
+          </div>
+        {% else %}
+          <div style="width:44px; height:44px; border-radius:6px; background:var(--bg-color); display:flex; align-items:center; justify-content:center;">
+            <i class="fa-solid {{ category_icon(p.category) }}" style="color:var(--text-muted); font-size:16px;"></i>
+          </div>
+        {% endif %}
+      </td>
+      <td style="font-family:monospace; font-size:12.5px; color:var(--text-muted);">{{ p.sku or '—' }}</td>
+      <td>{{ p.name }}</td>
+      <td>{{ p.category or '—' }}</td>
+      <td>${{ "%.2f"|format(p.price) }}</td>
+      <td>
+        {% if p.is_low_stock %}
+          <span class="badge badge-low">{{ p.quantity_in_stock }} left</span>
+        {% else %}
+          <span class="badge badge-ok">{{ p.quantity_in_stock }}</span>
+        {% endif %}
+      </td>
+      <td style="min-width:280px;">
+        <div style="display:flex; flex-direction:column; gap:8px;">
+          <div style="display:flex; gap:6px; flex-wrap:wrap;">
+            {% if 'manage_products' in permissions %}
+            <a href="{{ url_for('products.edit_product', product_id=p.id) }}" class="btn btn-secondary btn-sm"><i class="fa-solid fa-pen"></i> Edit</a>
+            <form method="POST" action="{{ url_for('products.delete_product', product_id=p.id) }}" onsubmit="return confirm('Delete this product?');">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button type="submit" class="btn btn-danger btn-sm"><i class="fa-solid fa-trash"></i> Delete</button>
+            </form>
+            {% endif %}
+            {% if 'adjust_stock' in permissions %}
+            <a href="{{ url_for('products.new_purchase_order', product_id=p.id) }}" class="btn btn-secondary btn-sm"><i class="fa-solid fa-file-invoice"></i> Order Stock</a>
+            {% endif %}
+            {% if 'manage_products' in permissions %}
+            <a href="{{ url_for('products.product_barcode', product_id=p.id) }}" class="btn btn-secondary btn-sm"><i class="fa-solid fa-barcode"></i> Barcode</a>
+            {% endif %}
+          </div>
+          {% if 'adjust_stock' in permissions %}
+          <form method="POST" action="{{ url_for('products.adjust_stock', product_id=p.id) }}"
+                style="display:flex; gap:6px; align-items:center; background:var(--bg-color); padding:6px 8px; border-radius:8px;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <span style="font-size:11px; color:var(--text-muted); white-space:nowrap;">Adjust:</span>
+            <input type="number" name="change_amount" placeholder="+/-" style="width:60px; padding:6px 8px;" required>
+            <input type="text" name="reason" placeholder="reason" style="width:90px; padding:6px 8px;">
+            <button type="submit" class="btn btn-secondary btn-sm" style="flex-shrink:0;">Go</button>
+          </form>
+          {% endif %}
+        </div>
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="7" style="color:var(--text-muted);">No products found.</td></tr>
+    {% endfor %}
+    <tr id="no-match-row" style="display:none;"><td colspan="7" style="color:var(--text-muted);">No products match your search.</td></tr>
+  </table>
+</div>
+
+<script>
+let activeCategory = '';
+
+function setCategoryFilter(category, btn) {
+  activeCategory = category;
+  document.querySelectorAll('#category-pills .category-pill').forEach(p => p.classList.remove('active'));
+  btn.classList.add('active');
+  filterProductsTable();
+}
+
+function filterProductsTable() {
+  const query = document.getElementById('product-search-input').value.trim().toLowerCase();
+  const rows = document.querySelectorAll('.product-row');
+  let visibleCount = 0;
+
+  rows.forEach(row => {
+    const matchesSearch = row.getAttribute('data-search').includes(query);
+    const matchesCategory = !activeCategory || row.getAttribute('data-category') === activeCategory;
+    const visible = matchesSearch && matchesCategory;
+    row.style.display = visible ? '' : 'none';
+    if (visible) visibleCount++;
+  });
+
+  document.getElementById('no-match-row').style.display = visibleCount === 0 ? '' : 'none';
+}
+</script>
+{% endblock %}

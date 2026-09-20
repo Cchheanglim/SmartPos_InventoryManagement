@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Shift Templates — SmartPOS{% endblock %}
+{% block content %}
+<h1>Shift Templates</h1>
+<p class="subtitle">Manage the shift options staff can be assigned to.</p>
+
+<div class="card" style="max-width:480px;">
+  <h3 style="margin-top:0;">{{ 'Edit Shift' if editing else 'New Shift' }}</h3>
+  <form method="POST" action="{{ url_for('shift.update_shift', shift_id=editing.id) if editing else url_for('shift.create_shift') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label>Name</label>
+    <input type="text" name="name" value="{{ editing.name if editing else '' }}" required>
+
+    <div class="form-row">
+      <div>
+        <label>Start Time</label>
+        <input type="time" name="start_time" value="{{ format_shift_time(editing.start_time) if editing else '' }}" required>
+      </div>
+      <div>
+        <label>End Time</label>
+        <input type="time" name="end_time" value="{{ format_shift_time(editing.end_time) if editing else '' }}" required>
+      </div>
+    </div>
+
+    <div style="margin-top:16px;">
+      <button type="submit" class="btn btn-primary">{{ 'Save Changes' if editing else 'Add Shift' }}</button>
+      {% if editing %}
+      <a href="{{ url_for('shift.list_shifts') }}" class="btn btn-secondary">Cancel</a>
+      {% endif %}
+    </div>
+  </form>
+</div>
+
+<div class="card">
+  <table>
+    <tr><th>Name</th><th>Start</th><th>End</th><th>Actions</th></tr>
+    {% for t in shifts %}
+    <tr>
+      <td>{{ t.name }}</td>
+      <td>{{ format_shift_time(t.start_time) }}</td>
+      <td>{{ format_shift_time(t.end_time) }}</td>
+      <td style="display:flex; gap:6px;">
+        <a href="{{ url_for('shift.edit_shift', shift_id=t.id) }}" class="btn btn-secondary btn-sm"><i class="fa-solid fa-pen"></i> Edit</a>
+        <form method="POST" action="{{ url_for('shift.delete_shift', shift_id=t.id) }}" onsubmit="return confirm('Delete this shift template? Staff already assigned to it keep their current shift.');">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="btn btn-danger btn-sm"><i class="fa-solid fa-trash"></i> Delete</button>
+        </form>
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="4" style="color:var(--text-muted);">No shift templates yet.</td></tr>
+    {% endfor %}
+  </table>
+</div>
+{% endblock %}

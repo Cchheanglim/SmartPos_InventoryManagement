@@ -1,0 +1,12 @@
+-- Role, permission, and sample product seed data is already embedded at
+-- the bottom of schema.sql (roles/permissions/role_permissions/products
+-- INSERT statements), so running schema.sql seeds those automatically.
+--
+-- Demo user LOGINS aren't seedable via plain SQL because passwords must
+-- go through the app's password hashing (Werkzeug), not stored as plain
+-- text. After loading schema.sql, run:
+--
+--     python scripts/seed_users.py
+--
+-- This creates one demo account per role (see that file for the list),
+-- all with password: password123
