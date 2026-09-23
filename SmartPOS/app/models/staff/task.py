@@ -1,6 +1,7 @@
 class Task:
     def __init__(self, id, title, description, assigned_to, assigned_by, status,
-                 created_at, completed_at=None, assigned_to_name=None, assigned_by_name=None):
+                 created_at, completed_at=None, assigned_to_name=None, assigned_by_name=None,
+                 priority='medium', due_date=None):
         self.id = id
         self.title = title
         self.description = description
@@ -11,6 +12,8 @@ class Task:
         self.completed_at = completed_at
         self.assigned_to_name = assigned_to_name
         self.assigned_by_name = assigned_by_name
+        self.priority = priority or 'medium'
+        self.due_date = due_date
 
     @property
     def is_completed(self):
@@ -31,4 +34,6 @@ class Task:
             completed_at=row.get("completed_at"),
             assigned_to_name=row.get("assigned_to_name"),
             assigned_by_name=row.get("assigned_by_name"),
+            priority=row.get("priority", "medium"),
+            due_date=row.get("due_date"),
         )

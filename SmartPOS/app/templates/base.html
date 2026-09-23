@@ -57,6 +57,11 @@
         <i class="fa-solid fa-users-gear"></i><span>Manage Staff</span>
       </a>
       {% endif %}
+      {% if 'manage_roles' in permissions %}
+      <a href="{{ url_for('rbac.index') }}" class="{{ 'active' if request.blueprint == 'rbac' }}">
+        <i class="fa-solid fa-shield-halved"></i><span>Roles &amp; Permissions</span>
+      </a>
+      {% endif %}
     </nav>
     <div class="user-box">
       <div style="margin-top:12px;"><a href="{{ url_for('auth.logout') }}"><i class="fa-solid fa-arrow-right-from-bracket"></i> Log out</a></div>

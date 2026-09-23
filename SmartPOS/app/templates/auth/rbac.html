@@ -1,0 +1,488 @@
+{% extends "base.html" %}
+{% block title %}Roles &amp; Permissions — SmartPOS{% endblock %}
+{% block page_title %}Roles &amp; Permissions{% endblock %}
+
+{% block content %}
+<div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:24px; flex-wrap:wrap; gap:16px;">
+  <div>
+    <h1>Role-Based Access Control (RBAC)</h1>
+    <p class="subtitle" style="margin-bottom:0;">
+      Dynamic runtime security governance. Create custom roles, register permissions, adjust access matrices, and assign staff roles without editing SQL or code.
+    </p>
+  </div>
+  <div style="display:flex; gap:10px; flex-wrap:wrap;">
+    <button type="button" class="btn btn-secondary" onclick="openModal('new-role-modal')">
+      <i class="fa-solid fa-plus"></i> New Role
+    </button>
+    <button type="button" class="btn btn-secondary" onclick="openModal('new-perm-modal')">
+      <i class="fa-solid fa-shield-plus"></i> New Permission
+    </button>
+    <button type="button" class="btn btn-lime" onclick="openModal('assign-user-modal')">
+      <i class="fa-solid fa-user-tag"></i> Assign Staff Role
+    </button>
+  </div>
+</div>
+
+<!-- ======================================================================= -->
+<!-- 1. ROLE X PERMISSION SECURITY MATRIX                                    -->
+<!-- ======================================================================= -->
+<div class="card" style="margin-bottom:30px;">
+  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:12px;">
+    <div>
+      <h2 style="margin:0 0 4px; font-size:18px;">
+        <i class="fa-solid fa-table-cells" style="color:var(--primary); margin-right:8px;"></i>
+        Security Capability Matrix
+      </h2>
+      <p style="color:var(--text-muted); font-size:13px; margin:0;">
+        Toggle permissions for each role. Changes are applied atomically system-wide upon saving.
+      </p>
+    </div>
+    <div style="display:flex; align-items:center; gap:12px;">
+      <span style="font-size:12px; color:var(--text-muted);">
+        <i class="fa-solid fa-shield-halved" style="color:var(--primary);"></i> Atomic Validation Active
+      </span>
+    </div>
+  </div>
+
+  <form method="POST" action="{{ url_for('rbac.save_matrix') }}" id="matrix-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+    <div style="overflow-x:auto; border:1px solid var(--border-color); border-radius:var(--border-radius); background:var(--card-bg);">
+      <table style="width:100%; border-collapse:collapse;">
+        <thead>
+          <tr style="background:rgba(0,0,0,0.03); border-bottom:2px solid var(--border-color);">
+            <th style="padding:14px 16px; text-align:left; font-size:13px; min-width:260px;">Permission Name &amp; Description</th>
+            <th style="padding:14px 12px; text-align:center; font-size:12px; width:90px;">Type</th>
+            {% for role in roles %}
+            <th style="padding:14px 12px; text-align:center; min-width:110px;">
+              <div style="font-weight:600; font-size:13.5px; text-transform:capitalize;">{{ role.name.replace('_', ' ') }}</div>
+              <div style="font-size:11px; font-weight:normal; color:var(--text-muted); margin-top:2px;">
+                {{ role.user_count }} staff
+              </div>
+            </th>
+            {% endfor %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for perm in all_permissions %}
+          <tr style="border-bottom:1px solid var(--border-color);">
+            <td style="padding:12px 16px;">
+              <div style="font-weight:600; font-size:13.5px; color:var(--text-dark);">
+                {{ perm.display_name }}
+              </div>
+              <div style="font-size:11.5px; color:var(--text-muted); margin-top:2px; font-family:monospace;">
+                {{ perm.name }}
+              </div>
+              {% if perm.description and perm.description != perm.display_name %}
+              <div style="font-size:12px; color:var(--text-muted); margin-top:3px;">
+                {{ perm.description }}
+              </div>
+              {% endif %}
+            </td>
+            <td style="padding:12px; text-align:center;">
+              {% if perm.is_system %}
+              <span style="display:inline-block; font-size:11px; padding:2px 8px; border-radius:10px; background:rgba(125,57,235,0.12); color:var(--primary); font-weight:600;">
+                System
+              </span>
+              {% else %}
+              <span style="display:inline-block; font-size:11px; padding:2px 8px; border-radius:10px; background:rgba(198,255,51,0.25); color:#2d3a04; font-weight:600;">
+                Custom
+              </span>
+              {% endif %}
+            </td>
+            {% for role in roles %}
+            {% set is_checked = perm.id in current[role.id] %}
+            <td style="padding:12px; text-align:center; vertical-align:middle;">
+              <input type="checkbox"
+                     name="role_{{ role.id }}"
+                     value="{{ perm.id }}"
+                     style="width:18px; height:18px; accent-color:var(--primary); cursor:pointer;"
+                     {{ 'checked' if is_checked }}>
+            </td>
+            {% endfor %}
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-top:18px; flex-wrap:wrap; gap:12px;">
+      <div style="font-size:12.5px; color:var(--text-muted);">
+        <i class="fa-solid fa-circle-info" style="color:var(--primary);"></i>
+        <strong>Lockout Safeguard:</strong> At least one role must retain <code>manage_roles</code>. Submissions violating this rule are rejected server-side without modifying MySQL.
+      </div>
+      <button type="submit" class="btn btn-primary">
+        <i class="fa-solid fa-floppy-disk"></i> Save Permission Matrix
+      </button>
+    </div>
+  </form>
+</div>
+
+<!-- ======================================================================= -->
+<!-- 2. ROLES & PERMISSIONS MANAGEMENT (TWO-COLUMN GRID)                     -->
+<!-- ======================================================================= -->
+<div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(460px, 1fr)); gap:24px; margin-bottom:30px;">
+
+  <!-- ROLES MANAGEMENT -->
+  <div class="card">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+      <h2 style="margin:0; font-size:17px;">
+        <i class="fa-solid fa-user-shield" style="color:var(--primary); margin-right:8px;"></i>
+        Roles ({{ roles|length }})
+      </h2>
+      <button type="button" class="btn btn-sm btn-secondary" onclick="openModal('new-role-modal')">
+        <i class="fa-solid fa-plus"></i> Add Role
+      </button>
+    </div>
+
+    <div style="overflow-x:auto;">
+      <table style="width:100%; border-collapse:collapse;">
+        <thead>
+          <tr style="border-bottom:1px solid var(--border-color); font-size:12px; color:var(--text-muted); text-align:left;">
+            <th style="padding:8px 10px;">Role Name</th>
+            <th style="padding:8px 10px; text-align:center;">Assigned Staff</th>
+            <th style="padding:8px 10px; text-align:right;">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for role in roles %}
+          <tr style="border-bottom:1px solid var(--border-color); font-size:13.5px;">
+            <td style="padding:10px;">
+              <div style="font-weight:600;">{{ role.name.replace('_', ' ') }}</div>
+              <div style="font-size:11px; color:var(--text-muted); font-family:monospace;">{{ role.name }}</div>
+            </td>
+            <td style="padding:10px; text-align:center;">
+              {% if role.user_count > 0 %}
+              <span style="display:inline-block; font-size:12px; padding:2px 10px; border-radius:10px; background:var(--success-bg); color:var(--success); font-weight:600;">
+                {{ role.user_count }} staff
+              </span>
+              {% else %}
+              <span style="display:inline-block; font-size:12px; padding:2px 10px; border-radius:10px; background:rgba(0,0,0,0.06); color:var(--text-muted);">
+                0 staff
+              </span>
+              {% endif %}
+            </td>
+            <td style="padding:10px; text-align:right; white-space:nowrap;">
+              <!-- Rename -->
+              {% if role.name != 'admin' %}
+              <button type="button" class="btn btn-sm btn-secondary"
+                      onclick="editRolePrompt({{ role.id }}, '{{ role.name }}')"
+                      title="Rename Role" style="padding:5px 9px;">
+                <i class="fa-solid fa-pen"></i>
+              </button>
+              {% endif %}
+
+              <!-- Delete -->
+              {% if role.name == 'admin' %}
+              <span style="font-size:11.5px; color:var(--text-muted); margin-left:6px;" title="Admin role cannot be deleted">
+                <i class="fa-solid fa-lock"></i> Protected
+              </span>
+              {% elif role.user_count > 0 %}
+              <button type="button" class="btn btn-sm"
+                      style="background:rgba(0,0,0,0.05); color:var(--text-muted); cursor:not-allowed; padding:5px 9px;"
+                      title="Cannot delete: {{ role.user_count }} user(s) assigned" disabled>
+                <i class="fa-solid fa-trash"></i>
+              </button>
+              {% else %}
+              <form method="POST" action="{{ url_for('rbac.delete_role', role_id=role.id) }}" style="display:inline;"
+                    onsubmit="return confirm('Delete role \'{{ role.name }}\'?');">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="btn btn-sm btn-danger" title="Delete Role" style="padding:5px 9px;">
+                  <i class="fa-solid fa-trash"></i>
+                </button>
+              </form>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- PERMISSIONS MANAGEMENT -->
+  <div class="card">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+      <h2 style="margin:0; font-size:17px;">
+        <i class="fa-solid fa-key" style="color:var(--primary); margin-right:8px;"></i>
+        Permissions ({{ all_permissions|length }})
+      </h2>
+      <button type="button" class="btn btn-sm btn-secondary" onclick="openModal('new-perm-modal')">
+        <i class="fa-solid fa-plus"></i> Add Permission
+      </button>
+    </div>
+
+    <div style="overflow-x:auto; max-height:480px; overflow-y:auto;">
+      <table style="width:100%; border-collapse:collapse;">
+        <thead>
+          <tr style="border-bottom:1px solid var(--border-color); font-size:12px; color:var(--text-muted); text-align:left;">
+            <th style="padding:8px 10px;">Permission</th>
+            <th style="padding:8px 10px;">Classification</th>
+            <th style="padding:8px 10px; text-align:right;">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for perm in all_permissions %}
+          <tr style="border-bottom:1px solid var(--border-color); font-size:13px;">
+            <td style="padding:10px;">
+              <div style="font-weight:600;">{{ perm.display_name }}</div>
+              <div style="font-size:11px; color:var(--text-muted); font-family:monospace;">{{ perm.name }}</div>
+              {% if perm.description %}
+              <div style="font-size:11.5px; color:var(--text-muted); margin-top:2px;">{{ perm.description }}</div>
+              {% endif %}
+            </td>
+            <td style="padding:10px; vertical-align:middle;">
+              {% if perm.is_system %}
+              <span style="display:inline-block; font-size:11px; padding:2px 8px; border-radius:10px; background:rgba(125,57,235,0.12); color:var(--primary); font-weight:600;">
+                <i class="fa-solid fa-lock" style="font-size:9px;"></i> System
+              </span>
+              {% else %}
+              <span style="display:inline-block; font-size:11px; padding:2px 8px; border-radius:10px; background:rgba(198,255,51,0.25); color:#2d3a04; font-weight:600;">
+                Custom
+              </span>
+              {% endif %}
+            </td>
+            <td style="padding:10px; text-align:right; white-space:nowrap; vertical-align:middle;">
+              {% if perm.is_system %}
+              <span style="font-size:11px; color:var(--text-muted);" title="Route security decorator protected">
+                Code-Enforced
+              </span>
+              {% else %}
+              <button type="button" class="btn btn-sm btn-secondary"
+                      onclick="editPermPrompt({{ perm.id }}, '{{ perm.name }}', '{{ perm.description|default('', true) }}')"
+                      title="Edit Permission" style="padding:5px 9px;">
+                <i class="fa-solid fa-pen"></i>
+              </button>
+              <form method="POST" action="{{ url_for('rbac.delete_permission', permission_id=perm.id) }}" style="display:inline;"
+                    onsubmit="return confirm('Delete custom permission \'{{ perm.name }}\'?');">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="btn btn-sm btn-danger" title="Delete Permission" style="padding:5px 9px;">
+                  <i class="fa-solid fa-trash"></i>
+                </button>
+              </form>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<!-- ======================================================================= -->
+<!-- 3. STAFF ROLE QUICK ASSIGNMENT CARD                                     -->
+<!-- ======================================================================= -->
+<div class="card">
+  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:12px;">
+    <div>
+      <h2 style="margin:0 0 4px; font-size:17px;">
+        <i class="fa-solid fa-users-gear" style="color:var(--primary); margin-right:8px;"></i>
+        Staff Role Assignments
+      </h2>
+      <p style="color:var(--text-muted); font-size:13px; margin:0;">
+        Assign or reassign employee accounts to any active runtime role.
+      </p>
+    </div>
+    <a href="{{ url_for('staff.list_staff') }}" class="btn btn-sm btn-secondary">
+      <i class="fa-solid fa-arrow-up-right-from-square"></i> Open Staff Directory
+    </a>
+  </div>
+
+  <div style="overflow-x:auto;">
+    <table style="width:100%; border-collapse:collapse;">
+      <thead>
+        <tr style="border-bottom:1px solid var(--border-color); font-size:12px; color:var(--text-muted); text-align:left;">
+          <th style="padding:10px 12px;">Staff Member</th>
+          <th style="padding:10px 12px;">Email</th>
+          <th style="padding:10px 12px;">Current Role</th>
+          <th style="padding:10px 12px; text-align:right;">Quick Change Role</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for u in users %}
+        <tr style="border-bottom:1px solid var(--border-color); font-size:13.5px;">
+          <td style="padding:10px 12px; font-weight:600;">
+            {{ u.name }}
+            {% if u.id == current_user.id %}
+            <span style="font-size:11px; padding:1px 6px; border-radius:6px; background:rgba(125,57,235,0.1); color:var(--primary); margin-left:4px;">You</span>
+            {% endif %}
+          </td>
+          <td style="padding:10px 12px; color:var(--text-muted);">{{ u.email }}</td>
+          <td style="padding:10px 12px;">
+            <span style="display:inline-block; font-size:12px; padding:2px 10px; border-radius:10px; background:rgba(0,0,0,0.06); text-transform:capitalize; font-weight:500;">
+              {{ u.role_name.replace('_', ' ') }}
+            </span>
+          </td>
+          <td style="padding:10px 12px; text-align:right;">
+            <form method="POST" action="{{ url_for('rbac.assign_user_role') }}" style="display:inline-flex; align-items:center; gap:8px;">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="user_id" value="{{ u.id }}">
+              <select name="role_id" style="width:auto; padding:6px 10px; font-size:12.5px; border-radius:6px;" onchange="this.form.submit()">
+                {% for r in roles %}
+                <option value="{{ r.id }}" {{ 'selected' if r.id == u.role_id }}>{{ r.name.replace('_', ' ')|capitalize }}</option>
+                {% endfor %}
+              </select>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ======================================================================= -->
+<!-- MODALS                                                                  -->
+<!-- ======================================================================= -->
+
+<!-- NEW ROLE MODAL -->
+<div id="new-role-modal" class="custom-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:999; align-items:center; justify-content:center;">
+  <div class="card" style="width:100%; max-width:440px; margin:20px;">
+    <h2 style="margin:0 0 12px; font-size:18px;"><i class="fa-solid fa-plus" style="color:var(--primary);"></i> Create New Role</h2>
+    <p style="font-size:13px; color:var(--text-muted); margin-bottom:16px;">
+      Define a new role name. After creation, you can configure its capabilities in the matrix above.
+    </p>
+    <form method="POST" action="{{ url_for('rbac.create_role') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label for="role_name_input">Role Name</label>
+      <input type="text" id="role_name_input" name="name" placeholder="e.g. store_supervisor, shift_auditor" required autofocus>
+      <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:20px;">
+        <button type="button" class="btn btn-secondary" onclick="closeModal('new-role-modal')">Cancel</button>
+        <button type="submit" class="btn btn-primary">Create Role</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- EDIT ROLE MODAL -->
+<div id="edit-role-modal" class="custom-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:999; align-items:center; justify-content:center;">
+  <div class="card" style="width:100%; max-width:440px; margin:20px;">
+    <h2 style="margin:0 0 12px; font-size:18px;"><i class="fa-solid fa-pen" style="color:var(--primary);"></i> Rename Role</h2>
+    <form id="edit-role-form" method="POST" action="">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label for="edit_role_name_input">New Role Name</label>
+      <input type="text" id="edit_role_name_input" name="name" required>
+      <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:20px;">
+        <button type="button" class="btn btn-secondary" onclick="closeModal('edit-role-modal')">Cancel</button>
+        <button type="submit" class="btn btn-primary">Save Changes</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- NEW PERMISSION MODAL -->
+<div id="new-perm-modal" class="custom-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:999; align-items:center; justify-content:center;">
+  <div class="card" style="width:100%; max-width:480px; margin:20px;">
+    <h2 style="margin:0 0 12px; font-size:18px;"><i class="fa-solid fa-shield-plus" style="color:var(--primary);"></i> Register New Permission</h2>
+    <p style="font-size:13px; color:var(--text-muted); margin-bottom:16px;">
+      Register a capability that can be toggled across roles in the capability matrix.
+    </p>
+    <form method="POST" action="{{ url_for('rbac.create_permission') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label for="perm_name_input">Permission Identifier</label>
+      <input type="text" id="perm_name_input" name="name" placeholder="e.g. export_tax_data, approve_discounts" required>
+
+      <label for="perm_desc_input">Description / Purpose</label>
+      <input type="text" id="perm_desc_input" name="description" placeholder="Short description of this capability">
+
+      <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:20px;">
+        <button type="button" class="btn btn-secondary" onclick="closeModal('new-perm-modal')">Cancel</button>
+        <button type="submit" class="btn btn-primary">Register Permission</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- EDIT PERMISSION MODAL -->
+<div id="edit-perm-modal" class="custom-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:999; align-items:center; justify-content:center;">
+  <div class="card" style="width:100%; max-width:480px; margin:20px;">
+    <h2 style="margin:0 0 12px; font-size:18px;"><i class="fa-solid fa-pen" style="color:var(--primary);"></i> Edit Permission</h2>
+    <form id="edit-perm-form" method="POST" action="">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label for="edit_perm_name_input">Permission Identifier</label>
+      <input type="text" id="edit_perm_name_input" name="name" required>
+
+      <label for="edit_perm_desc_input">Description</label>
+      <input type="text" id="edit_perm_desc_input" name="description">
+
+      <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:20px;">
+        <button type="button" class="btn btn-secondary" onclick="closeModal('edit-perm-modal')">Cancel</button>
+        <button type="submit" class="btn btn-primary">Save Changes</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ASSIGN USER ROLE MODAL -->
+<div id="assign-user-modal" class="custom-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:999; align-items:center; justify-content:center;">
+  <div class="card" style="width:100%; max-width:480px; margin:20px;">
+    <h2 style="margin:0 0 12px; font-size:18px;"><i class="fa-solid fa-user-tag" style="color:var(--primary);"></i> Assign Staff Role</h2>
+    <form method="POST" action="{{ url_for('rbac.assign_user_role') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label for="select_staff_id">Select Employee</label>
+      <select id="select_staff_id" name="user_id" required>
+        {% for u in users %}
+        <option value="{{ u.id }}">{{ u.name }} ({{ u.email }}) — Currently: {{ u.role_name.replace('_', ' ')|capitalize }}</option>
+        {% endfor %}
+      </select>
+
+      <label for="select_role_id">New Role</label>
+      <select id="select_role_id" name="role_id" required>
+        {% for r in roles %}
+        <option value="{{ r.id }}">{{ r.name.replace('_', ' ')|capitalize }}</option>
+        {% endfor %}
+      </select>
+
+      <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:20px;">
+        <button type="button" class="btn btn-secondary" onclick="closeModal('assign-user-modal')">Cancel</button>
+        <button type="submit" class="btn btn-lime">Update Assignment</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+function openModal(id) {
+  var el = document.getElementById(id);
+  if (el) {
+    el.style.display = 'flex';
+  }
+}
+
+function closeModal(id) {
+  var el = document.getElementById(id);
+  if (el) {
+    el.style.display = 'none';
+  }
+}
+
+function editRolePrompt(roleId, currentName) {
+  var form = document.getElementById('edit-role-form');
+  var input = document.getElementById('edit_role_name_input');
+  form.action = "{{ url_for('rbac.index') }}roles/" + roleId + "/edit";
+  input.value = currentName;
+  openModal('edit-role-modal');
+}
+
+function editPermPrompt(permId, currentName, currentDesc) {
+  var form = document.getElementById('edit-perm-form');
+  var nameInput = document.getElementById('edit_perm_name_input');
+  var descInput = document.getElementById('edit_perm_desc_input');
+  form.action = "{{ url_for('rbac.index') }}permissions/" + permId + "/edit";
+  nameInput.value = currentName;
+  descInput.value = currentDesc || '';
+  openModal('edit-perm-modal');
+}
+
+// Close modals when clicking backdrop
+window.addEventListener('click', function(e) {
+  document.querySelectorAll('.custom-modal').forEach(function(modal) {
+    if (e.target === modal) {
+      modal.style.display = 'none';
+    }
+  });
+});
+</script>
+{% endblock %}

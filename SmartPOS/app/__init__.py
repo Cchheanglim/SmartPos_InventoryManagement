@@ -28,6 +28,7 @@ def create_app(config_class=Config):
 
     # ---- Real, implemented blueprints — routes stay thin; all logic lives in services. ----
     from app.routes.auth.auth_routes import auth_bp
+    from app.routes.auth.rbac_routes import rbac_bp
     from app.routes.dashboard.dashboard_routes import dashboard_bp
     from app.routes.inventory.product_routes import products_bp
     from app.routes.inventory.category_routes import bp as category_bp
@@ -42,6 +43,7 @@ def create_app(config_class=Config):
     from app.routes.notifications.notification_routes import bp as notification_bp
 
     app.register_blueprint(auth_bp)
+    app.register_blueprint(rbac_bp)
     app.register_blueprint(dashboard_bp)
     app.register_blueprint(products_bp)
     app.register_blueprint(category_bp, url_prefix="/categories")

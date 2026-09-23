@@ -5,13 +5,13 @@ from app.models.staff.task import Task
 class TaskRepository:
     """Only this class writes MySQL queries for the tasks table."""
 
-    def create(self, title, description, assigned_to, assigned_by):
+    def create(self, title, description, assigned_to, assigned_by, priority='medium', due_date=None):
         db = get_db()
         with db.cursor() as cur:
             cur.execute(
-                """INSERT INTO tasks (title, description, assigned_to, assigned_by)
-                   VALUES (%s, %s, %s, %s)""",
-                (title, description, assigned_to, assigned_by),
+                """INSERT INTO tasks (title, description, assigned_to, assigned_by, priority, due_date)
+                   VALUES (%s, %s, %s, %s, %s, %s)""",
+                (title, description, assigned_to, assigned_by, priority, due_date),
             )
             new_id = cur.lastrowid
         db.commit()

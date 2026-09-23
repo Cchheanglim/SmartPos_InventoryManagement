@@ -15,13 +15,13 @@ class PermissionService:
 
     def get_permissions_for_user(self, user):
         """
-        A user's real permission set is their role's permissions PLUS
-        anything an Admin has individually granted them — individual
-        grants only ever add, never remove what the role already allows.
+        Resolves permissions strictly according to RBAC Rules:
+        user -> role -> permissions.
+        Role changes are the only way to change access (no per-user overrides).
         """
-        role_perms = self.permission_repo.list_for_role(user.role_id)
-        extra_perms = self.permission_repo.list_extra_permission_names_for_user(user.id)
-        return role_perms | extra_perms
+        if user is None:
+            return set()
+        return self.permission_repo.list_for_role(user.role_id)
 
     def has_permission(self, user, permission_name):
         if user is None or not user.is_active:

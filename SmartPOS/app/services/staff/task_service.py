@@ -11,16 +11,23 @@ class TaskService:
     def __init__(self):
         self.task_repo = TaskRepository()
 
-    def assign_task(self, title, description, assigned_to, assigned_by):
+    def assign_task(self, title, description, assigned_to, assigned_by, priority='medium', due_date=None):
         if not title or not title.strip():
             raise ValueError("Task title is required.")
-        task_id = self.task_repo.create(title.strip(), (description or "").strip() or None, assigned_to, assigned_by)
+        task_id = self.task_repo.create(
+            title.strip(),
+            (description or "").strip() or None,
+            assigned_to,
+            assigned_by,
+            priority=priority or 'medium',
+            due_date=(due_date or "").strip() or None
+        )
 
         # Imported here (not at module level) to avoid a circular import —
         # notification_service depends on auth_service.
         from app.services.notifications.notification_service import NotificationService
         NotificationService().notify_user(
-            assigned_to, f'New task assigned: "{title.strip()}"', category="task",
+            assigned_to, f'New task assigned: "{title.strip()}" ({priority.capitalize()} priority)', category="task",
         )
         return task_id
 

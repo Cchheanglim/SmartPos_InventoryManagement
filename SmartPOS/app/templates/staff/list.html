@@ -9,7 +9,11 @@
   <div>
     <a href="{{ url_for('tasks.list_tasks') }}" class="btn btn-secondary" style="margin-right:8px;"><i class="fa-solid fa-list-check"></i> To-Do List</a>
     <a href="{{ url_for('attendance.attendance_log') }}" class="btn btn-secondary" style="margin-right:8px;"><i class="fa-solid fa-clock"></i> Attendance Log</a>
+    {% if 'manage_roles' in permissions %}
+    <a href="{{ url_for('rbac.index') }}" class="btn btn-secondary" style="margin-right:8px;"><i class="fa-solid fa-shield-halved"></i> Roles &amp; Permissions</a>
+    {% else %}
     <a href="{{ url_for('staff.permissions_matrix') }}" class="btn btn-secondary" style="margin-right:8px;"><i class="fa-solid fa-sliders"></i> Roles &amp; Permissions</a>
+    {% endif %}
     <a href="{{ url_for('staff.new_staff') }}" class="btn btn-primary"><i class="fa-solid fa-user-plus"></i> Add Employee</a>
   </div>
 </div>
